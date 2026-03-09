@@ -21,3 +21,6 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# GCP Workload Identity Federation credentials
+gha-creds-*.json

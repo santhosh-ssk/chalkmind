@@ -3,5 +3,6 @@ frontend/dist/
 .env
 .venv/
 .git/
+.github/
 __pycache__/
 *.pyc
