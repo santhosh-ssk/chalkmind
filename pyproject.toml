@@ -1,0 +1,16 @@
+[project]
+name = "chalkmind"
+version = "0.1.0"
+description = "AI Whiteboard Tutor — learn anything with visual explanations"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "google-adk>=1.2.0",
+    "google-genai>=1.0.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["backend*"]
