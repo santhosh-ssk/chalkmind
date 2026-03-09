@@ -38,7 +38,6 @@ jobs:
           password: ${{ steps.auth.outputs.access_token }}
 
       - name: Build and push Docker image
-        working-directory: app
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/chalkmind/chalkmind"
           docker build -t "${IMAGE}:${{ github.sha }}" -t "${IMAGE}:latest" .
