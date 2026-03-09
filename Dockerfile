@@ -20,6 +20,6 @@ COPY backend/ ./backend/
 # Copy built frontend
 COPY --from=frontend-build /build/dist ./frontend/dist
 
-EXPOSE 8000
+EXPOSE 8080
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
