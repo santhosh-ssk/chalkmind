@@ -40,6 +40,17 @@ export interface DrawCircle {
   strokeWidth?: number;
 }
 
+export interface DrawEllipse {
+  type: 'ellipse';
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  stroke?: string;
+  fill?: string;
+  strokeWidth?: number;
+}
+
 export interface DrawRect {
   type: 'rect';
   x: number;
@@ -85,6 +96,7 @@ export type DrawCommand =
   | DrawLine
   | DrawArrow
   | DrawCircle
+  | DrawEllipse
   | DrawRect
   | DrawText
   | DrawAnnotation

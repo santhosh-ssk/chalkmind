@@ -4,6 +4,7 @@ import type {
   DrawLine,
   DrawArrow,
   DrawCircle,
+  DrawEllipse,
   DrawRect,
   DrawText,
   DrawAnnotation,
@@ -133,6 +134,32 @@ function AnimCircle({ cx, cy, r, stroke, fill, strokeWidth, progress }: DrawCirc
       cx={cx}
       cy={cy}
       r={r}
+      stroke={stroke || '#e8e4d9'}
+      strokeWidth={strokeWidth || 2}
+      fill={fill && fill !== 'none' ? fill : 'none'}
+      fillOpacity={fillOp}
+      strokeLinecap="round"
+      strokeDasharray={circumference}
+      strokeDashoffset={circumference * (1 - p)}
+    />
+  );
+}
+
+/* ── AnimEllipse ─────────────────────────────────────── */
+
+function AnimEllipse({ cx, cy, rx, ry, stroke, fill, strokeWidth, progress }: DrawEllipse & { progress: number }) {
+  if (progress <= 0) return null;
+  const p = Math.min(progress, 1);
+  // Approximate circumference of ellipse (Ramanujan)
+  const h = ((rx - ry) ** 2) / ((rx + ry) ** 2);
+  const circumference = Math.PI * (rx + ry) * (1 + (3 * h) / (10 + Math.sqrt(4 - 3 * h)));
+  const fillOp = fill && fill !== 'none' ? Math.max(0, (p - 0.5) / 0.5) : 0;
+  return (
+    <ellipse
+      cx={cx}
+      cy={cy}
+      rx={rx}
+      ry={ry}
       stroke={stroke || '#e8e4d9'}
       strokeWidth={strokeWidth || 2}
       fill={fill && fill !== 'none' ? fill : 'none'}
@@ -274,6 +301,8 @@ export function RenderDrawCommand({ cmd, progress }: { cmd: DrawCommand; progres
       return <AnimArrow {...cmd} progress={progress} />;
     case 'circle':
       return <AnimCircle {...cmd} progress={progress} />;
+    case 'ellipse':
+      return <AnimEllipse {...cmd} progress={progress} />;
     case 'rect':
       return <AnimRect {...cmd} progress={progress} />;
     case 'text':
