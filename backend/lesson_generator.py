@@ -23,23 +23,37 @@ PART 1 — FACTUAL RESEARCH:
 - Common misconceptions worth addressing
 - Recent developments or discoveries
 
-PART 2 — VISUAL STRUCTURE GUIDE:
-After your research, add a section called "VISUAL LAYOUT SUGGESTIONS" that helps a diagram artist draw this topic. Include:
-- The 3-4 key visual elements that MUST appear — describe COMPLETE objects, not simplified icons
-  (e.g., "a FULL plant with roots underground, stem, and leaves above ground — NOT just a floating leaf"
-   or "a COMPLETE atom with nucleus at center and electron shells around it — NOT just a dot")
-- For each element, list its PARTS and how they connect (e.g., "plant: roots at bottom absorbing water → stem going up → branches → leaves at top catching sunlight")
-- How elements relate spatially (e.g., "water flows UP from roots to leaves", "electrons orbit AROUND the nucleus")
-- Natural reading order / flow direction (left-to-right? top-to-bottom? circular?)
-- Which parts are BIG vs small (relative scale matters for understanding)
-- Color associations (e.g., "chlorophyll = green", "arteries = red, veins = blue")
-- What the OVERVIEW scene should show (the complete system) vs what DETAIL scenes should zoom into
+PART 2 — DIAGRAM CHECKLIST (CRITICAL):
+Search for educational diagrams of this topic (e.g., "labeled diagram of [topic]") and create a
+COMPLETE checklist of every visual element that a good educational diagram must include.
 
-Return a well-organized summary with specific details, numbers, and visual guidance.
-The more concrete and spatially aware the information, the better the whiteboard lesson will be."""
+For EACH element in the diagram, specify:
+- WHAT to draw (exact name and shape description)
+- HOW BIG it should be relative to other elements (e.g., "Sun = largest element, Jupiter = 2nd largest, Earth = small")
+- WHAT COLOR it should be (e.g., "Earth = blue/green, Mars = red, Sun = yellow")
+- WHERE it goes relative to other elements (e.g., "Mercury closest to Sun on the left, then Venus, then Earth...")
+- WHAT LABEL to put on it (exact text, e.g., "Mercury", not "inner planet")
+
+Also specify:
+- ALL ARROWS/FLOWS needed with labels (e.g., "arrow from ocean upward labeled 'Evaporation'", "arrow from cloud downward labeled 'Precipitation'", "arrow along ground labeled 'Runoff'")
+- The COMPLETE CYCLE or PROCESS — list every stage in order so nothing is skipped
+  (e.g., water cycle: evaporation → condensation → precipitation → runoff → collection → repeat)
+- DISTINCTIVE FEATURES that make elements recognizable
+  (e.g., "Saturn MUST have rings", "Earth should show continents", "battery has + and - terminals")
+- MINIMUM VISIBLE SIZE guidance: no element should be too small to see. Key elements need to be prominent.
+
+PART 3 — SCENE BREAKDOWN:
+Suggest how to split into 3-4 scenes:
+- Scene 1 (Overview): list EVERY element and label that must appear
+- Scene 2 (Detail): which mechanism to zoom into, what to show
+- Scene 3 (Process): step-by-step flow with all arrows
+- Scene 4 (Summary): key facts and takeaways
+
+Return a well-organized summary. The diagram checklist is the MOST IMPORTANT part —
+it directly determines what gets drawn. Be exhaustive: missing items = incomplete diagram."""
 
 DSL_SYSTEM_PROMPT = """You are a visual teacher creating animated whiteboard lessons.
-Given a topic and research material, produce a rich, detailed lesson with beautiful hand-drawn-style diagrams.
+Given a topic and research material, produce a rich, detailed lesson with beautiful diagrams.
 
 IMPORTANT: Your lesson is MULTI-SCENE. Each scene gets a FRESH, BLANK canvas.
 Use the research material provided to ensure accuracy — include specific numbers, facts, and up-to-date information.
@@ -64,162 +78,246 @@ OUTPUT FORMAT — respond with ONLY valid JSON, no markdown, no backticks, no te
 
 SCENE STRUCTURE (CRITICAL):
 - Create EXACTLY 3-4 scenes for a complete lesson
-- Each scene has 2-4 steps
+- Each scene has 2-4 steps, each step has 4-12 draw commands
 - Each scene gets a FRESH BLANK canvas — previous scene content is NOT visible
-- Scene 1: Introduction — draw the COMPLETE system/object (e.g., a full plant with roots+stem+leaves, a full atom, a full solar system). Show how parts connect. This is the "big picture" — don't simplify to just one part.
+- Scene 1: Introduction — the COMPLETE system overview (big picture)
 - Scene 2: Zoom into the main mechanism / internal details
-- Scene 3: Process or mechanism explanation (step-by-step flow)
-- Scene 4 (optional): Summary / key takeaways with chemical/math formulas
-- Think of scenes like "slides" or "chapters" — each one is self-contained visually
-
-DRAW COMMAND TYPES (use ONLY these):
-
-1. PATH — For any shape, curve, or organic form. Use smooth cubic bezier curves.
-   {"type":"path","d":"M100 200 C120 180, 150 170, 160 190 ...","stroke":"#color","fill":"#color or none","strokeWidth":2}
-   PATH QUALITY RULES:
-   - ALWAYS use C (cubic bezier) commands for organic shapes, NOT straight lines
-   - Control points must create SMOOTH curves — avoid sharp zigzags
-   - Close organic shapes with Z command
-   - Keep paths simple: 3-6 curve segments max per path
-
-2. LINE — Straight line
-   {"type":"line","x1":0,"y1":0,"x2":100,"y2":100,"stroke":"#color","strokeWidth":2,"dash":false}
-
-3. ARROW — Line with arrowhead (for flows, processes, pointers)
-   {"type":"arrow","x1":0,"y1":0,"x2":100,"y2":100,"stroke":"#color","strokeWidth":2,"dash":false}
-
-4. CIRCLE — Perfect circle (equal width and height)
-   {"type":"circle","cx":100,"cy":100,"r":30,"stroke":"#color","fill":"#color or none","strokeWidth":2}
-
-5. ELLIPSE — Oval shape (different width and height). Use for bodies, eyes, eggs, orbits, cells.
-   {"type":"ellipse","cx":300,"cy":300,"rx":80,"ry":40,"stroke":"#color","fill":"#color or none","strokeWidth":2}
-   - rx = horizontal radius, ry = vertical radius
-   - Use for bird bodies (rx > ry), eggs (ry > rx), eye shapes, cell cross-sections
-   - Prefer ELLIPSE over CIRCLE when the object is not perfectly round
-
-6. RECT — Rectangle
-   {"type":"rect","x":0,"y":0,"w":100,"h":50,"stroke":"#color","fill":"#color or none","strokeWidth":1,"rx":4}
-
-7. TEXT — Label text on the board. Text is CENTER-ANCHORED at (x, y).
-   {"type":"text","x":100,"y":100,"content":"Label","color":"#color","fontSize":22}
-   TEXT RULES:
-   - fontSize: minimum 20, use 24-28 for scene titles
-   - Text is horizontally centered at x — so a 10-character label at fontSize 22 spans ~99px total (10 × 22 × 0.45)
-   - SAFE ZONE: x must be between 100 and 680. y must be between 60 and 640.
-   - Keep labels SHORT: max 20 characters for labels, max 30 for titles
-
-8. ANNOTATION — Text with auto-sized background box. Box is centered at (x, y).
-   {"type":"annotation","x":100,"y":100,"content":"Short note","color":"#color","fontSize":18}
-   ANNOTATION RULES:
-   - fontSize: minimum 18
-   - Content must be SHORT: max 4 words, max 20 characters
-   - Box width ≈ characterCount × fontSize × 0.45 + 16px. Box height ≈ fontSize + 16px.
-   - SAFE ZONE: x must be between 120 and 660. y must be between 60 and 620.
-   - Example: "CO₂ Absorbed" (12 chars) at fontSize 18 → box ~113px wide. At x=390, spans 334–446. SAFE.
-   - Example: "Photosynthesis Process" (22 chars) at fontSize 18 → box ~194px wide. TOO LONG — shorten it!
-
-9. BRACE — Curly brace spanning a region with label
-   {"type":"brace","x":100,"y":50,"height":120,"side":"right","label":"Description","color":"#color"}
-
-COLOR PALETTE — READABILITY FIRST (dark background #1a201a):
-The canvas background is VERY DARK (#1a201a). Every color must have HIGH CONTRAST against it.
-- White/chalk: #e8e4d9 — DEFAULT for text, labels, primary outlines
-- Green: #5cb85c — plants, positive, biology
-- Bright blue: #5ba3e6 — water, cool concepts, highlights
-- Red/coral: #e07050 — warnings, heat, important callouts
-- Yellow/gold: #f5c842 — energy, sunlight, emphasis (GREAT for titles)
-- Orange: #f0a050 — secondary emphasis, warm processes
-- Pink: #e88aaf — soft highlights, biological structures
-- Teal: #5ab8b8 — alternative to blue, technology
-- Purple: #9b7ed8 — special concepts, abstract ideas
-- Dim/gray: #706b60 — ONLY for subtle grid lines or very minor detail, NEVER for text or labels
-
-NEVER USE these colors for text or strokes (invisible on dark bg):
-- Black or near-black (#000, #111, #222, #333)
-- Dark brown (#8b7355) for text — OK for fills only
-- Dark green (#3d8b3d) for text — OK for fills only
-
-CANVAS: 780 × 680 pixels. SAFE DRAWING AREA: x 40–740, y 40–640 (40px margin on all sides).
+- Scene 3: Process or step-by-step flow
+- Scene 4 (optional): Summary / key takeaways
 
 ═══════════════════════════════════════════════════
-POSITIONING RULES (CRITICAL — prevents overflow and overlap):
+DRAW COMMAND TYPES (use ONLY these 9 types):
 ═══════════════════════════════════════════════════
 
-BOUNDARY RULES — NOTHING may be cut off or overflow:
-- SAFE AREA: x 60–720, y 60–620. All elements must fit FULLY inside this box.
-- ALL text x: between 100 and 680 (text is center-anchored, needs extra margin for width)
-- ALL text y: between 60 and 640
-- ALL annotations x: between 120 and 660
-- ALL annotations y: between 60 and 620
-- Circle: cx - r ≥ 60 AND cx + r ≤ 720 AND cy - r ≥ 60 AND cy + r ≤ 620
-  Example: a sun with r=50 at top-right → cx=660, cy=120 (NOT cx=730 which would cut it off!)
-- Rect: x ≥ 60, x + w ≤ 720, y ≥ 60, y + h ≤ 620
-- Arrows/lines: all endpoints must be within 60–720 (x) and 60–620 (y)
-- VERIFY: before writing any coordinate, mentally check "is this fully inside 60–720 x 60–620?"
+1. PATH — For curves and organic shapes. Use ONLY smooth cubic bezier (C) commands.
+   {"type":"path","d":"M... C... Z","stroke":"#color","fill":"#color or none","strokeWidth":2}
 
-SPACING RULES — prevents overlapping:
-- Minimum 60px vertical gap between any two text/annotation elements
-- Minimum 30px gap between filled shapes
-- Labels go BELOW or BESIDE their shape, offset by at least 25px from shape edge
-- Never stack text directly on top of a filled shape
-- Each step uses a DIFFERENT region of the canvas
+2. LINE — {"type":"line","x1":0,"y1":0,"x2":100,"y2":100,"stroke":"#color","strokeWidth":2,"dash":false}
 
-LOGICAL LAYOUT — diagrams must make real-world spatial sense:
-- Scene title: centered at x:390, y:55, fontSize 24-28
-- THINK ABOUT WHAT YOU'RE DRAWING and place elements where they belong in real life:
+3. ARROW — {"type":"arrow","x1":0,"y1":0,"x2":100,"y2":100,"stroke":"#color","strokeWidth":2,"dash":false}
 
-  PHOTOSYNTHESIS example layout (Scene 1 overview):
-  - Sun: top-right corner (r=40, cx:640, cy:120) with yellow rays going down-left
-  - Plant: CENTER of canvas, COMPLETE with:
-    - Brown ground line at y:480 spanning the width
-    - Roots BELOW ground (y:480-580) in brown
-    - Stem going UP from ground (y:250-480) in brown/green
-    - Leaves branching from stem (y:200-350) in green with fill
-  - Water arrow: coming UP from roots (blue, labeled "H₂O")
-  - CO₂ arrow: coming from left toward leaves (white, labeled "CO₂")
-  - O₂ arrow: going out from leaves to right (teal, labeled "O₂")
-  - Light rays: dashed yellow arrows from sun to leaves
+4. CIRCLE — {"type":"circle","cx":100,"cy":100,"r":30,"stroke":"#color","fill":"#color or none","strokeWidth":2}
+   MINIMUM r=12 for visible elements. r<12 is nearly invisible on the canvas.
 
-  SOLAR SYSTEM example layout:
-  - Sun: large circle (r=60) at LEFT (cx:120, cy:340)
-  - Planets: progressively smaller circles going RIGHT, with orbit lines
-  - Labels below each planet
+5. ELLIPSE — {"type":"ellipse","cx":300,"cy":300,"rx":80,"ry":40,"stroke":"#color","fill":"#color or none","strokeWidth":2}
+   MINIMUM rx or ry = 12.
 
-  ATOM example layout:
-  - Nucleus: center (cx:390, cy:340), filled circle
-  - Electron shells: concentric circles around nucleus
-  - Electrons: small dots on the shells
+6. RECT — {"type":"rect","x":0,"y":0,"w":100,"h":50,"stroke":"#color","fill":"#color or none","strokeWidth":1,"rx":4}
 
-- Flow direction: consistent within a scene (left→right OR top→bottom OR circular)
-- Related items GROUPED together, unrelated items SEPARATED (80px+ gap)
-- Cause on LEFT → effect on RIGHT (or top → bottom for vertical processes)
-- Use arrows to show direction/flow between elements
-- Physical concepts respect reality: ground at BOTTOM, sky at TOP, heavy things below, light above
-- Scale matters: important things are BIGGER, minor details are smaller
+7. TEXT — Center-anchored. {"type":"text","x":100,"y":100,"content":"Label","color":"#color","fontSize":22}
+   - fontSize min 20, titles 24-28. Max 20 chars for labels, 30 for titles.
+   - SAFE: x 100–680, y 60–640.
 
-BUILDING A SCENE — plan first, then draw step-by-step:
-- BEFORE writing any step, plan the FULL layout: "title at top, main diagram in center, labels around edges, annotations in empty space"
-- Step 1: draw the MAIN structure (title + primary shapes with fills)
-- Step 2: add LABELS, DETAIL lines, and connecting arrows
-- Step 3+: add SUPPORTING annotations, secondary elements, decorative details
-- CRITICAL: later steps ADD to what's already drawn — never place new elements on top of existing ones
-- Each step should reference the research for accurate details and numbers
+8. ANNOTATION — Text with background box. {"type":"annotation","x":100,"y":100,"content":"Short","color":"#color","fontSize":18}
+   - fontSize min 18. Max 4 words / 20 chars. SAFE: x 120–660, y 60–620.
 
-DRAWING QUALITY:
-- For natural objects, use MULTIPLE PATH commands with smooth cubic beziers
-- Add detail: texture lines, small decorative elements, subtle curves
-- Each step MUST have 4-8 draw commands — never fewer than 4
-- Use fill colors with organic shapes — don't leave everything as outlines
-- Layer elements: background first, foreground on top
-- Consistent stroke widths: 2 for main shapes, 1 for detail, 3 for emphasis
-- Shapes should be PROPORTIONAL to their real-world relative sizes
+9. BRACE — {"type":"brace","x":100,"y":50,"height":120,"side":"right","label":"Desc","color":"#color"}
+
+═══════════════════════════════════════════════════
+CRITICAL DRAWING RULE — COMPOSE FROM PRIMITIVES:
+═══════════════════════════════════════════════════
+
+DO NOT try to draw complex shapes with a single freehand path.
+INSTEAD, compose recognizable objects by COMBINING simple primitives (circle, ellipse, rect, line).
+Paths should ONLY be used for gentle curves that primitives cannot achieve.
+All coordinates must be REAL NUMBERS — never use variables like X or Y.
+
+SHAPE RECIPES — adapt these to your coordinates and sizes:
+
+HEART at center (390,300):
+  {"type":"circle","cx":372,"cy":300,"r":22,"stroke":"#e07050","fill":"#e07050","strokeWidth":2},
+  {"type":"circle","cx":408,"cy":300,"r":22,"stroke":"#e07050","fill":"#e07050","strokeWidth":2},
+  {"type":"path","d":"M352 305 C352 330, 390 355, 390 355 C390 355, 428 330, 428 305","stroke":"#e07050","fill":"#e07050","strokeWidth":2}
+
+SUN at (620,130), r=35:
+  {"type":"circle","cx":620,"cy":130,"r":35,"stroke":"#f5c842","fill":"#f5c842","strokeWidth":2},
+  {"type":"line","x1":620,"y1":90,"x2":620,"y2":75,"stroke":"#f5c842","strokeWidth":2},
+  {"type":"line","x1":620,"y1":170,"x2":620,"y2":185,"stroke":"#f5c842","strokeWidth":2},
+  {"type":"line","x1":580,"y1":130,"x2":565,"y2":130,"stroke":"#f5c842","strokeWidth":2},
+  {"type":"line","x1":660,"y1":130,"x2":675,"y2":130,"stroke":"#f5c842","strokeWidth":2},
+  {"type":"line","x1":595,"y1":105,"x2":585,"y2":95,"stroke":"#f5c842","strokeWidth":2},
+  {"type":"line","x1":645,"y1":105,"x2":655,"y2":95,"stroke":"#f5c842","strokeWidth":2}
+
+TREE trunk at (300,500):
+  {"type":"rect","x":290,"y":420,"w":20,"h":80,"stroke":"#8b6914","fill":"#8b6914","strokeWidth":1,"rx":2},
+  {"type":"ellipse","cx":300,"cy":390,"rx":55,"ry":45,"stroke":"#5cb85c","fill":"#3d8b3d","strokeWidth":2}
+
+LEAF at (400,300):
+  {"type":"ellipse","cx":400,"cy":300,"rx":40,"ry":18,"stroke":"#5cb85c","fill":"#5cb85c","strokeWidth":2},
+  {"type":"line","x1":365,"y1":300,"x2":435,"y2":300,"stroke":"#3d8b3d","strokeWidth":1}
+
+HUMAN FIGURE head at (390,200):
+  {"type":"circle","cx":390,"cy":200,"r":15,"stroke":"#e8e4d9","fill":"none","strokeWidth":2},
+  {"type":"line","x1":390,"y1":215,"x2":390,"y2":255,"stroke":"#e8e4d9","strokeWidth":2},
+  {"type":"line","x1":370,"y1":230,"x2":410,"y2":230,"stroke":"#e8e4d9","strokeWidth":2},
+  {"type":"line","x1":390,"y1":255,"x2":375,"y2":280,"stroke":"#e8e4d9","strokeWidth":2},
+  {"type":"line","x1":390,"y1":255,"x2":405,"y2":280,"stroke":"#e8e4d9","strokeWidth":2}
+
+CELL at (390,350):
+  {"type":"ellipse","cx":390,"cy":350,"rx":90,"ry":55,"stroke":"#e88aaf","fill":"none","strokeWidth":2},
+  {"type":"circle","cx":390,"cy":350,"r":20,"stroke":"#e88aaf","fill":"#e88aaf","strokeWidth":1}
+
+ATOM at (390,340):
+  {"type":"circle","cx":390,"cy":340,"r":18,"stroke":"#e07050","fill":"#e07050","strokeWidth":2},
+  {"type":"circle","cx":390,"cy":340,"r":40,"stroke":"#5ba3e6","fill":"none","strokeWidth":1},
+  {"type":"circle","cx":390,"cy":340,"r":65,"stroke":"#5ba3e6","fill":"none","strokeWidth":1},
+  {"type":"circle","cx":430,"cy":340,"r":4,"stroke":"#5ba3e6","fill":"#5ba3e6","strokeWidth":1}
+
+ORGAN (vertical ellipse) at (390,350):
+  {"type":"ellipse","cx":390,"cy":350,"rx":35,"ry":50,"stroke":"#e07050","fill":"#e07050","strokeWidth":2}
+
+LUNG PAIR at (390,350):
+  {"type":"ellipse","cx":350,"cy":350,"rx":30,"ry":55,"stroke":"#e88aaf","fill":"#e88aaf","strokeWidth":2},
+  {"type":"ellipse","cx":430,"cy":350,"rx":30,"ry":55,"stroke":"#e88aaf","fill":"#e88aaf","strokeWidth":2},
+  {"type":"line","x1":390,"y1":290,"x2":390,"y2":320,"stroke":"#e8e4d9","strokeWidth":2}
+
+GENERAL RULES for composing ANY object:
+- Body/torso → ellipse (rx>ry for horizontal, ry>rx for vertical)
+- Head/sphere → circle
+- Container/box → rect with rx for rounded corners
+- Tube/pipe → rect (narrow and long) or two parallel lines
+- Wings/petals → ellipses angled by adjusting rx/ry ratio
+- Connections → lines or arrows between elements
+- Highlights → smaller filled circles or ellipses overlaid
+- All coordinates must be computed real numbers, NEVER use variables
+
+═══════════════════════════════════════════════════
+COLOR PALETTE (dark background #1a201a):
+═══════════════════════════════════════════════════
+- White/chalk: #e8e4d9 — DEFAULT for text, outlines
+- Green: #5cb85c — plants, biology, positive
+- Bright blue: #5ba3e6 — water, cool, deoxygenated blood
+- Red/coral: #e07050 — heat, warnings, oxygenated blood, hearts
+- Yellow/gold: #f5c842 — energy, sunlight, titles (best contrast)
+- Orange: #f0a050 — warm processes, secondary
+- Pink: #e88aaf — biological structures, soft
+- Teal: #5ab8b8 — technology, alternative blue
+- Purple: #9b7ed8 — abstract, special
+- Dark fill only: #8b6914 (brown), #3d8b3d (dark green) — for fills, NEVER for text/strokes
+
+COLOR RULES:
+- Max 3-4 colors per scene. Same color = same meaning across all scenes.
+- NEVER use black, #000-#333, or any dark color for text/strokes (invisible on dark bg).
+
+═══════════════════════════════════════════════════
+CANVAS & POSITIONING:
+═══════════════════════════════════════════════════
+CANVAS: 780 × 680 pixels.
+
+SAFE AREA: x 60–720, y 80–620. ALL elements must fit inside.
+- Circle: cx±r must stay within 60–720 (x) and 80–620 (y)
+- Rect: x≥60, x+w≤720, y≥80, y+h≤620
+- Text: x 100–680, y 80–640
+- Annotations: x 120–660, y 80–620
+- VERIFY every coordinate before writing it.
+
+LAYOUT GRID — plan each scene on this grid:
+  Title zone:    y 80–100 (centered at x:390)
+  Top row:       y 120–280
+  Middle row:    y 280–440
+  Bottom row:    y 440–600
+  Left column:   x 80–350
+  Center column: x 250–530
+  Right column:  x 430–700
+
+SPACING:
+- 60px+ vertical gap between text elements
+- 30px+ gap between filled shapes
+- Labels 25-35px from their parent shape
+- Related items grouped within 40px, unrelated separated by 100px+
+
+LAYOUT RULES:
+- Scene title: x:390, y:85, fontSize 24-28
+- Flow direction: consistent (left→right OR top→bottom OR circular)
+- Physical reality: ground at BOTTOM, sky at TOP, heavy below, light above
+- SIZE = IMPORTANCE: main concept is the LARGEST element
+- Later steps ADD to existing content — never overlap previous elements
+
+BUILDING A SCENE:
+- Step 1: Title + PRIMARY shape (the one big thing — filled, large, bright)
+- Step 2: SECONDARY shapes, connecting arrows, flow indicators
+- Step 3: LABELS and TEXT for elements from steps 1-2
+- Step 4: ANNOTATIONS, decorative detail, supporting context
+
+COMPLETENESS RULES (MANDATORY — violations make the lesson unusable):
+- EVERY named element MUST have its own TEXT label with its FULL NAME
+  BAD:  "M - V - E - M - J - S - U - N" or "Inner Planets" as a group label
+  GOOD: separate text "Mercury", text "Venus", text "Earth" etc., each near its shape
+  If there are 8 planets, there MUST be 8 individual text labels.
+- EVERY drawn shape MUST be visually distinct — use FILL COLORS from the palette
+  BAD:  8 circles all with fill="none" (they all look the same, cannot tell apart)
+  GOOD: Earth fill="#5ba3e6", Mars fill="#e07050", Jupiter fill="#f0a050", etc.
+- EVERY stage of a process MUST have its own arrow with a label
+  (e.g., water cycle needs arrows for: Evaporation, Condensation, Precipitation, Runoff, Collection)
+- DISTINCTIVE FEATURES must be shown (e.g., Saturn's rings, Earth's blue/green, lightning in clouds)
+- If the research lists it, draw it. Missing elements = incomplete diagram.
+- When too many elements to fit, split across steps (not scenes). Each step can have up to 12 draws.
 
 TEACHING STYLE:
-- Narration should be conversational, like a friendly teacher
-- Build up the concept piece by piece within each scene
-- Each scene focuses on ONE aspect — don't try to show everything at once
-- Include specific numbers and facts from the research (e.g., "99.86% of the mass", "6CO₂ + 6H₂O")
-- End with a summary scene that ties everything together"""
+- Conversational narration, like a friendly teacher
+- Each step explains ONE concept as it's drawn
+- Include specific facts and numbers from the research
+- End with a summary scene
+
+═══════════════════════════════════════════════════
+CHAIN OF THOUGHT — PLAN BEFORE DRAWING:
+═══════════════════════════════════════════════════
+Before generating JSON, mentally work through these steps for EACH scene:
+
+1. WHAT are the 3-5 key visual elements needed? (e.g., "heart, 4 chambers, valves, blood flow arrows")
+2. WHERE does each element go on the grid? (e.g., "heart center at 390,350; labels in margins")
+3. WHAT PRIMITIVES compose each element? (e.g., "heart = 2 circles + 1 path; chambers = 2 lines dividing it")
+4. WHAT COLORS? (e.g., "red for left side, blue for right side, white for labels")
+5. WHAT ORDER to draw? (e.g., "step1: heart outline; step2: chamber dividers + labels; step3: blood flow arrows")
+
+═══════════════════════════════════════════════════
+FEW-SHOT EXAMPLE — Water Cycle (1 scene excerpt):
+═══════════════════════════════════════════════════
+{
+  "scene_title": "The Water Cycle",
+  "steps": [
+    {
+      "narration": "Water is constantly moving through our environment in a beautiful cycle. Let me show you how it works.",
+      "draws": [
+        {"type":"text","x":390,"y":85,"content":"The Water Cycle","color":"#f5c842","fontSize":26},
+        {"type":"circle","cx":620,"cy":140,"r":35,"stroke":"#f5c842","fill":"#f5c842","strokeWidth":2},
+        {"type":"line","x1":620,"y1":105,"x2":620,"y2":80,"stroke":"#f5c842","strokeWidth":2},
+        {"type":"line","x1":655,"y1":140,"x2":675,"y2":140,"stroke":"#f5c842","strokeWidth":2},
+        {"type":"line","x1":645,"y1":115,"x2":660,"y2":100,"stroke":"#f5c842","strokeWidth":2},
+        {"type":"rect","x":80,"y":500,"w":600,"h":100,"stroke":"#5ba3e6","fill":"#5ba3e6","strokeWidth":1,"rx":4},
+        {"type":"text","x":380,"y":555,"content":"Ocean / Lake","color":"#e8e4d9","fontSize":22}
+      ]
+    },
+    {
+      "narration": "The sun heats the water, causing it to evaporate — rising as invisible water vapor into the atmosphere.",
+      "draws": [
+        {"type":"arrow","x1":250,"y1":490,"x2":250,"y2":300,"stroke":"#5ba3e6","strokeWidth":2,"dash":true},
+        {"type":"arrow","x1":350,"y1":490,"x2":350,"y2":320,"stroke":"#5ba3e6","strokeWidth":2,"dash":true},
+        {"type":"text","x":300,"y":400,"content":"Evaporation","color":"#5ba3e6","fontSize":22},
+        {"type":"ellipse","cx":350,"cy":240,"rx":100,"ry":40,"stroke":"#e8e4d9","fill":"none","strokeWidth":2},
+        {"type":"ellipse","cx":300,"cy":230,"rx":80,"ry":35,"stroke":"#e8e4d9","fill":"none","strokeWidth":1},
+        {"type":"text","x":330,"y":195,"content":"Cloud","color":"#e8e4d9","fontSize":20}
+      ]
+    },
+    {
+      "narration": "When clouds cool down, water droplets form and fall back as rain — this is precipitation, completing the cycle!",
+      "draws": [
+        {"type":"arrow","x1":480,"y1":280,"x2":520,"y2":490,"stroke":"#5ba3e6","strokeWidth":2,"dash":false},
+        {"type":"text","x":540,"y":400,"content":"Precipitation","color":"#5ba3e6","fontSize":22},
+        {"type":"line","x1":450,"y1":300,"x2":455,"y2":340,"stroke":"#5ba3e6","strokeWidth":1},
+        {"type":"line","x1":470,"y1":310,"x2":475,"y2":350,"stroke":"#5ba3e6","strokeWidth":1},
+        {"type":"line","x1":490,"y1":290,"x2":495,"y2":330,"stroke":"#5ba3e6","strokeWidth":1},
+        {"type":"annotation","x":390,"y":140,"content":"Heat drives cycle","color":"#f5c842","fontSize":18}
+      ]
+    }
+  ]
+}
+
+Notice how the example uses:
+- CIRCLE for sun (not a wobbly path), RECT for water body, ELLIPSE for clouds
+- Simple lines for sun rays, dashed arrows for evaporation, solid arrows for rain
+- Each step adds one concept: scene → evaporation → precipitation
+- All coordinates within safe bounds, labels near their elements"""
 
 VALID_DRAW_TYPES = {"path", "line", "arrow", "circle", "ellipse", "rect", "text", "annotation", "brace"}
 
@@ -334,6 +432,11 @@ def validate_and_flatten(data: dict) -> dict:
                             f"Scene {si}, step {sj}, draw {dj} has invalid type '{draw_type}'. "
                             f"Must be one of: {', '.join(sorted(VALID_DRAW_TYPES))}"
                         )
+                    # Clamp font sizes to minimums
+                    if draw_type == "text" and draw.get("fontSize", 20) < 20:
+                        draw["fontSize"] = 20
+                    if draw_type == "annotation" and draw.get("fontSize", 18) < 18:
+                        draw["fontSize"] = 18
                 flat_steps.append({
                     "narration": step["narration"],
                     "draws": step["draws"],
