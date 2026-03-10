@@ -27,7 +27,7 @@ steps:
       - '3600'
       - '--session-affinity'
       - '--set-secrets'
-      - 'GOOGLE_API_KEY=GOOGLE_API_KEY:latest'
+      - 'GOOGLE_API_KEY=GOOGLE_API_KEY:latest,RECAPTCHA_SECRET_KEY=RECAPTCHA_SECRET_KEY:latest,LANGFUSE_SECRET_KEY=LANGFUSE_SECRET_KEY:latest,LANGFUSE_PUBLIC_KEY=LANGFUSE_PUBLIC_KEY:latest'
 
 images:
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/chalkmind/chalkmind'

@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useLesson } from '../hooks/useLesson';
 import { usePlayback } from '../hooks/usePlayback';
+import { trackEvent } from '../utils/analytics';
 import ChalkboardCanvas from '../components/board/ChalkboardCanvas';
 
 const LOADING_MESSAGES = [
@@ -40,6 +41,24 @@ export default function BoardPage() {
   const totalSteps = lessonState.status === 'success' ? lessonState.lesson.steps.length : 0;
   const { currentStep, stepProgress, isPlaying, speed, play, pause, reset, jumpTo, setSpeed } =
     usePlayback(totalSteps);
+
+  // Track lesson_error once when error state is reached
+  const errorTracked = useRef(false);
+  useEffect(() => {
+    if (lessonState.status === 'error' && !errorTracked.current) {
+      errorTracked.current = true;
+      trackEvent('lesson_error', { topic, error: lessonState.message });
+    }
+  }, [lessonState.status, topic]);
+
+  // Track lesson_completed when playback reaches the last step
+  const completedTracked = useRef(false);
+  useEffect(() => {
+    if (totalSteps > 0 && currentStep >= totalSteps - 1 && !isPlaying && !completedTracked.current) {
+      completedTracked.current = true;
+      trackEvent('lesson_completed', { topic, step_count: totalSteps });
+    }
+  }, [currentStep, isPlaying, totalSteps, topic]);
 
   // Rotating loading messages
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);

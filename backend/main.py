@@ -12,6 +12,7 @@ from backend.lesson_generator import generate_lesson
 from backend.middleware.cors import setup_cors
 from backend.middleware.rate_limiter import limiter, rate_limit_exceeded_handler, GENERATE_LESSON_LIMIT
 from backend.models.requests import LessonRequest
+from backend.observability import create_trace, flush as flush_traces
 from backend.security.recaptcha import verify_recaptcha
 from backend.security.sanitizer import sanitize_input
 
@@ -46,6 +47,14 @@ async def generate_lesson_endpoint(request: Request, body: LessonRequest):
         sanitized_name = sanitize_input(body.name)
         logger.info("  [2] Sanitized: topic=%s name=%s", sanitized_topic, sanitized_name)
 
+        # Create observability trace
+        trace = create_trace("generate-lesson", metadata={
+            "topic": sanitized_topic,
+            "name": sanitized_name,
+            "age_group": body.age_group,
+            "difficulty": body.difficulty,
+        })
+
         # Generate lesson with personalization
         logger.info("  [3] Starting lesson generation...")
         lesson = await generate_lesson(
@@ -53,8 +62,10 @@ async def generate_lesson_endpoint(request: Request, body: LessonRequest):
             name=sanitized_name,
             age_group=body.age_group,
             difficulty=body.difficulty,
+            trace=trace,
         )
         logger.info("  [3] Lesson generated successfully, %d steps", len(lesson.get("steps", [])))
+        flush_traces()
         return lesson
     except HTTPException as e:
         logger.warning("  HTTPException: %s %s", e.status_code, e.detail)

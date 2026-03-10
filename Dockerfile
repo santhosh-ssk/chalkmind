@@ -4,6 +4,13 @@ WORKDIR /build
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+
+# Vite bakes VITE_* env vars at build time
+ARG VITE_GA_MEASUREMENT_ID
+ARG VITE_RECAPTCHA_SITE_KEY
+ENV VITE_GA_MEASUREMENT_ID=$VITE_GA_MEASUREMENT_ID
+ENV VITE_RECAPTCHA_SITE_KEY=$VITE_RECAPTCHA_SITE_KEY
+
 RUN npm run build
 
 # Stage 2: Python runtime

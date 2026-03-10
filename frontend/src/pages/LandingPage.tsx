@@ -12,6 +12,7 @@ import DifficultyChips from '../components/landing/DifficultyChips';
 import TopicInput from '../components/landing/TopicInput';
 import { useRecaptcha } from '../hooks/useRecaptcha';
 import { validateForm } from '../utils/validation';
+import { trackEvent } from '../utils/analytics';
 
 const TOPIC_PILLS = [
   'Photosynthesis',
@@ -73,6 +74,8 @@ export default function LandingPage() {
 
     const recaptchaToken = await executeRecaptcha('generate_lesson');
 
+    trackEvent('lesson_started', { topic: topic.trim(), age_group: ageGroup, difficulty });
+
     navigate(`/board/${encodeURIComponent(topic.trim())}`, {
       state: {
         name: name.trim(),
@@ -88,6 +91,7 @@ export default function LandingPage() {
   };
 
   const handleTopicPillClick = (pill: string) => {
+    trackEvent('topic_pill_clicked', { topic: pill });
     setTopic(pill);
   };
 

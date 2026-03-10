@@ -40,7 +40,10 @@ jobs:
       - name: Build and push Docker image
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/chalkmind/chalkmind"
-          docker build -t "${IMAGE}:${{ github.sha }}" -t "${IMAGE}:latest" .
+          docker build \
+            --build-arg VITE_GA_MEASUREMENT_ID=${{ vars.VITE_GA_MEASUREMENT_ID }} \
+            --build-arg VITE_RECAPTCHA_SITE_KEY=${{ vars.VITE_RECAPTCHA_SITE_KEY }} \
+            -t "${IMAGE}:${{ github.sha }}" -t "${IMAGE}:latest" .
           docker push "${IMAGE}:${{ github.sha }}"
           docker push "${IMAGE}:latest"
 
@@ -57,5 +60,12 @@ jobs:
             --timeout=3600
             --min-instances=0
             --max-instances=3
+          env_vars: |
+            RECAPTCHA_ENABLED=${{ vars.RECAPTCHA_ENABLED }}
+            LANGFUSE_BASE_URL=${{ vars.LANGFUSE_BASE_URL }}
+            RATE_LIMIT=${{ vars.RATE_LIMIT }}
           secrets: |
             GOOGLE_API_KEY=GOOGLE_API_KEY:latest
+            RECAPTCHA_SECRET_KEY=RECAPTCHA_SECRET_KEY:latest
+            LANGFUSE_SECRET_KEY=LANGFUSE_SECRET_KEY:latest
+            LANGFUSE_PUBLIC_KEY=LANGFUSE_PUBLIC_KEY:latest

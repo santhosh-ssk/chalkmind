@@ -5,7 +5,10 @@ import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import theme from './theme';
 import App from './App';
+import { initGA } from './utils/analytics';
 import './styles/global.scss';
+
+initGA();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

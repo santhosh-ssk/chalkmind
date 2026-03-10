@@ -12,6 +12,8 @@ from google.adk.sessions import InMemorySessionService
 from google.adk.tools import google_search
 from google.genai import types
 
+from backend.observability import trace_agent_call
+
 RESEARCH_PROMPT = """You are an educational researcher preparing material for a visual whiteboard lesson.
 The lesson will be drawn on a dark chalkboard (780x680px) with animated diagrams.
 
@@ -508,6 +510,7 @@ async def generate_lesson(
     name: str = "Learner",
     age_group: str = "18-40",
     difficulty: str = "beginner",
+    trace=None,
 ) -> dict:
     """Generate a whiteboard lesson: research with web grounding, then generate structured lesson."""
     user_id = "system"
@@ -550,7 +553,18 @@ async def generate_lesson(
         if event_count % 5 == 0:
             logger.info("[RESEARCH] ... %d events received so far (%.1fs)", event_count, time.time() - t1)
 
-    logger.info("[RESEARCH] Done in %.1fs — %d events, %d chars of research text", time.time() - t1, event_count, len(research_text))
+    research_ms = (time.time() - t1) * 1000
+    logger.info("[RESEARCH] Done in %.1fs — %d events, %d chars of research text", research_ms / 1000, event_count, len(research_text))
+
+    research_prompt = f"Research this topic for an educational lesson: {topic}{audience_context}"
+    trace_agent_call(
+        trace,
+        agent_name="topic_researcher",
+        input_text=research_prompt,
+        output_text=research_text[:5000],
+        latency_ms=research_ms,
+        metadata={"age_group": age_group, "difficulty": difficulty, "event_count": event_count},
+    )
 
     if not research_text.strip():
         raise ValueError("Research agent returned no results")
@@ -594,16 +608,37 @@ async def generate_lesson(
         if event_count % 5 == 0:
             logger.info("[LESSON] ... %d events received so far (%.1fs)", event_count, time.time() - t2)
 
-    logger.info("[LESSON] Done in %.1fs — %d events, %d chars of lesson text", time.time() - t2, event_count, len(lesson_text))
+    lesson_ms = (time.time() - t2) * 1000
+    logger.info("[LESSON] Done in %.1fs — %d events, %d chars of lesson text", lesson_ms / 1000, event_count, len(lesson_text))
 
     # ── Parse & validate ─────────────────────────────────────
     lesson_text = strip_fences(lesson_text)
     try:
         data = json.loads(lesson_text)
     except json.JSONDecodeError as e:
+        lesson_prompt = f"Create a visual whiteboard lesson about: {topic}"
+        trace_agent_call(
+            trace,
+            agent_name="lesson_generator",
+            input_text=lesson_prompt,
+            output_text=lesson_text[:2000],
+            latency_ms=lesson_ms,
+            error=f"JSON parse error: {e}",
+        )
         logger.error("[PARSE] Failed to parse JSON: %s — first 500 chars: %s", e, lesson_text[:500])
         raise ValueError(f"Failed to parse lesson JSON: {e}")
 
     result = validate_and_flatten(data)
+
+    lesson_prompt = f"Create a visual whiteboard lesson about: {topic}"
+    trace_agent_call(
+        trace,
+        agent_name="lesson_generator",
+        input_text=lesson_prompt,
+        output_text=lesson_text[:5000],
+        latency_ms=lesson_ms,
+        metadata={"steps_count": len(result["steps"]), "scene_count": result.get("scene_count", 1)},
+    )
+
     logger.info("=== generate_lesson DONE === total %.1fs, %d steps", time.time() - t0, len(result["steps"]))
     return result
