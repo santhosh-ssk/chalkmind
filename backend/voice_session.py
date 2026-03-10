@@ -1,8 +1,11 @@
 """Voice session manager — tracks narration progress through lesson steps with quiz support."""
 
 import logging
+import os
 
 logger = logging.getLogger(__name__)
+
+QUIZ_TIMER_SECONDS = int(os.getenv("QUIZ_TIMER_SECONDS", "6"))
 
 
 class VoiceSession:
@@ -92,7 +95,7 @@ class VoiceSession:
 
             prompt = (
                 f"You just finished teaching {scene_title}. Now introduce a quick quiz.\n"
-                f"Say something brief like: \"Let's see what you've learned! I have 3 quick questions for you.\"\n"
+                f"Say something brief like: \"Let's see what you've learned so far! I have 3 quick questions for you.\"\n"
                 f"Then STOP. Do NOT read the first question yet.\n\n"
                 f"QUIZ QUESTIONS (for your reference):\n{q_context}"
             )
@@ -282,7 +285,7 @@ class VoiceSession:
             f"Read question {idx + 1} aloud:\n"
             f"\"{question['question']}\"\n"
             f"Options:\n{opts}\n\n"
-            f"After reading all options, say \"You have 15 seconds\" and STOP.\n"
+            f"After reading all options, say \"You have {QUIZ_TIMER_SECONDS} seconds\" and STOP.\n"
             f"Do NOT reveal the answer."
         )
 

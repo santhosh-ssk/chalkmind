@@ -17,7 +17,9 @@ interface QuizOverlayProps {
   onSelectOption: (option: string) => void;
 }
 
-function TimerRing({ seconds, total = 15 }: { seconds: number; total?: number }) {
+const QUIZ_TIMER = Number(import.meta.env.VITE_QUIZ_TIMER_SECONDS) || 6;
+
+function TimerRing({ seconds, total = QUIZ_TIMER }: { seconds: number; total?: number }) {
   const radius = 28;
   const circumference = 2 * Math.PI * radius;
   const progress = seconds / total;

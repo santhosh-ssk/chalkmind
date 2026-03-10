@@ -43,6 +43,7 @@ jobs:
           docker build \
             --build-arg VITE_GA_MEASUREMENT_ID=${{ vars.VITE_GA_MEASUREMENT_ID }} \
             --build-arg VITE_RECAPTCHA_SITE_KEY=${{ vars.VITE_RECAPTCHA_SITE_KEY }} \
+            --build-arg VITE_QUIZ_TIMER_SECONDS=${{ vars.VITE_QUIZ_TIMER_SECONDS }} \
             -t "${IMAGE}:${{ github.sha }}" -t "${IMAGE}:latest" .
           docker push "${IMAGE}:${{ github.sha }}"
           docker push "${IMAGE}:latest"
@@ -64,6 +65,7 @@ jobs:
             RECAPTCHA_ENABLED=${{ vars.RECAPTCHA_ENABLED }}
             LANGFUSE_BASE_URL=${{ vars.LANGFUSE_BASE_URL }}
             RATE_LIMIT=${{ vars.RATE_LIMIT }}
+            QUIZ_TIMER_SECONDS=${{ vars.QUIZ_TIMER_SECONDS }}
           secrets: |
             GOOGLE_API_KEY=GOOGLE_API_KEY:latest
             RECAPTCHA_SECRET_KEY=RECAPTCHA_SECRET_KEY:latest

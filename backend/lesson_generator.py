@@ -15,14 +15,14 @@ from google.genai import types
 from backend.observability import trace_agent_call
 
 QUIZ_GENERATION_PROMPT = """You are an educational assessment expert. Given a lesson's scene narrations and topic,
-generate multiple-choice quiz questions to test comprehension.
+generate multiple-choice quiz questions at specified checkpoints.
 
 OUTPUT FORMAT — respond with ONLY valid JSON, no markdown, no backticks:
 {
   "quizzes": [
     {
       "scene": 0,
-      "scene_title": "Scene title here",
+      "scene_title": "Checkpoint title here",
       "questions": [
         {
           "question": "Clear, concise question text?",
@@ -42,22 +42,42 @@ OUTPUT FORMAT — respond with ONLY valid JSON, no markdown, no backticks:
 }
 
 RULES:
-1. Generate EXACTLY 3 questions per scene.
-2. Questions should test what was TAUGHT in the narrations, not obscure trivia.
-3. Each question must have exactly 4 options (A, B, C, D).
-4. The correct answer must be one of A, B, C, D.
-5. Distractors should be plausible but clearly wrong to someone who understood the lesson.
-6. Explanations should be 1 sentence, reinforcing the key concept.
-7. Follow the difficulty distribution provided.
-8. Questions should progress from testing recall to testing understanding within each scene.
-9. Do NOT repeat questions across scenes.
-10. Keep question text under 100 characters and option text under 60 characters."""
+1. Generate EXACTLY 3 questions per quiz checkpoint.
+2. Each quiz is CUMULATIVE — questions should cover ALL scenes from scene 0 through the checkpoint scene, not just the last scene.
+3. Questions should test what was TAUGHT in the narrations, not obscure trivia.
+4. Each question must have exactly 4 options (A, B, C, D).
+5. The correct answer must be one of A, B, C, D.
+6. Distractors should be plausible but clearly wrong to someone who understood the lesson.
+7. Explanations should be 1 sentence, reinforcing the key concept.
+8. Follow the difficulty distribution provided.
+9. Questions should progress from testing recall to testing understanding within each checkpoint.
+10. The later checkpoint MUST focus its questions primarily on the NEW scenes not covered by earlier checkpoints. Do NOT ask the same or similar questions as earlier checkpoints.
+11. Keep question text under 100 characters and option text under 60 characters."""
 
 DIFFICULTY_DISTRIBUTIONS = {
     "beginner": ["easy", "easy", "medium"],
     "intermediate": ["easy", "medium", "hard"],
     "advanced": ["medium", "medium", "hard"],
 }
+
+
+def quiz_scene_indices(scene_count: int) -> list[int]:
+    """Return 0-based scene indices that should have quiz checkpoints.
+
+    Quizzes are placed after sub-module 2 and sub-module 4 (1-indexed),
+    i.e. indices 1 and 3 (0-indexed). Each quiz is cumulative.
+    """
+    if scene_count <= 0:
+        return []
+    if scene_count == 1:
+        return [0]
+    if scene_count == 2:
+        return [1]
+    if scene_count == 3:
+        return [1, 2]
+    # 4+ scenes: after scene index 1 and scene index 3
+    return [1, 3]
+
 
 RESEARCH_PROMPT = """You are an educational researcher preparing material for a visual whiteboard lesson.
 The lesson will be drawn on a dark chalkboard (780x680px) with animated diagrams.
@@ -707,13 +727,25 @@ async def generate_lesson(
     return result
 
 
-def validate_quizzes(data: dict, scene_count: int, difficulty: str) -> list:
+def validate_quizzes(
+    data: dict,
+    scene_count: int,
+    difficulty: str,
+    expected_scenes: list[int] | None = None,
+) -> list:
     """Validate quiz JSON structure and difficulty distribution."""
     quizzes = data.get("quizzes")
     if not isinstance(quizzes, list):
         raise ValueError("Quiz data must have a 'quizzes' array")
 
+    if expected_scenes is not None and len(quizzes) != len(expected_scenes):
+        logger.warning(
+            "Expected %d quizzes (scenes %s) but got %d — will validate what we have",
+            len(expected_scenes), expected_scenes, len(quizzes),
+        )
+
     expected_dist = DIFFICULTY_DISTRIBUTIONS.get(difficulty, DIFFICULTY_DISTRIBUTIONS["beginner"])
+    allowed_scenes = set(expected_scenes) if expected_scenes is not None else set(range(scene_count))
 
     validated = []
     for qi, quiz in enumerate(quizzes):
@@ -722,6 +754,9 @@ def validate_quizzes(data: dict, scene_count: int, difficulty: str) -> list:
         scene = quiz.get("scene")
         if not isinstance(scene, int) or scene < 0 or scene >= scene_count:
             raise ValueError(f"Quiz {qi} has invalid scene index {scene}")
+        if scene not in allowed_scenes:
+            logger.warning("Quiz %d targets scene %d which is not in expected scenes %s — skipping", qi, scene, expected_scenes)
+            continue
 
         questions = quiz.get("questions")
         if not isinstance(questions, list) or len(questions) != 3:
@@ -754,9 +789,13 @@ def validate_quizzes(data: dict, scene_count: int, difficulty: str) -> list:
 
 
 async def generate_quizzes(lesson_data: dict, difficulty: str, trace=None) -> list:
-    """Generate quiz questions for each scene based on lesson narrations."""
+    """Generate cumulative quiz checkpoints at selected scene boundaries."""
     scene_count = lesson_data.get("scene_count", 1)
     steps = lesson_data.get("steps", [])
+    indices = quiz_scene_indices(scene_count)
+
+    if not indices:
+        return []
 
     # Build per-scene narration summaries
     scene_narrations = {}
@@ -767,23 +806,46 @@ async def generate_quizzes(lesson_data: dict, difficulty: str, trace=None) -> li
             scene_narrations[si] = {"title": title, "narrations": []}
         scene_narrations[si]["narrations"].append(step.get("narration", ""))
 
-    scene_text_parts = []
-    for si in sorted(scene_narrations.keys()):
-        info = scene_narrations[si]
-        narr = " ".join(info["narrations"])
-        scene_text_parts.append(f"Scene {si} ({info['title']}): {narr}")
+    # Build cumulative checkpoint descriptions with NEW vs already-quizzed markers
+    checkpoint_parts = []
+    prev_checkpoint = -1
+    for idx in indices:
+        covered = [si for si in sorted(scene_narrations.keys()) if si <= idx]
+        coverage_text = []
+        for si in covered:
+            info = scene_narrations[si]
+            narr = " ".join(info["narrations"])
+            marker = "[NEW]" if si > prev_checkpoint else "[ALREADY QUIZZED]"
+            coverage_text.append(f"  {marker} Scene {si} ({info['title']}): {narr}")
 
-    scene_text = "\n\n".join(scene_text_parts)
+        focus_note = ""
+        if prev_checkpoint >= 0:
+            focus_note = (
+                f"\n  IMPORTANT: Focus questions on NEW material from scenes "
+                f"{prev_checkpoint + 1}-{idx}. Scenes 0-{prev_checkpoint} were already quizzed."
+            )
+
+        checkpoint_parts.append(
+            f"CHECKPOINT at scene {idx} — cumulative, covers scenes 0-{idx}:{focus_note}\n"
+            + "\n".join(coverage_text)
+        )
+        prev_checkpoint = idx
+
+    checkpoints_text = "\n\n".join(checkpoint_parts)
     expected_dist = DIFFICULTY_DISTRIBUTIONS.get(difficulty, DIFFICULTY_DISTRIBUTIONS["beginner"])
     dist_desc = ", ".join(f"Q{i+1}: {d}" for i, d in enumerate(expected_dist))
 
+    scene_indices_str = ", ".join(str(i) for i in indices)
     prompt = (
         f"TOPIC: {lesson_data.get('title', 'Unknown')}\n"
         f"DIFFICULTY LEVEL: {difficulty}\n"
-        f"DIFFICULTY DISTRIBUTION per scene (3 questions each): {dist_desc}\n"
-        f"NUMBER OF SCENES: {scene_count}\n\n"
-        f"LESSON NARRATIONS BY SCENE:\n{scene_text}\n\n"
-        f"Generate quiz questions for ALL {scene_count} scenes."
+        f"DIFFICULTY DISTRIBUTION per checkpoint (3 questions each): {dist_desc}\n"
+        f"NUMBER OF CHECKPOINTS: {len(indices)}\n"
+        f"CHECKPOINT SCENE INDICES: {scene_indices_str}\n\n"
+        f"LESSON CONTENT BY CHECKPOINT:\n{checkpoints_text}\n\n"
+        f"Generate quiz questions for EXACTLY these {len(indices)} checkpoints. "
+        f"Use the 'scene' field values: {scene_indices_str}. "
+        f"Each quiz covers ALL material from scene 0 through its checkpoint scene."
     )
 
     quiz_session_id = str(uuid.uuid4())
@@ -791,7 +853,7 @@ async def generate_quizzes(lesson_data: dict, difficulty: str, trace=None) -> li
         app_name="chalkmind", user_id="system", session_id=quiz_session_id
     )
 
-    logger.info("[QUIZ] Starting quiz generation agent...")
+    logger.info("[QUIZ] Starting quiz generation for checkpoints %s...", indices)
     t3 = time.time()
     quiz_text = ""
     event_count = 0
@@ -819,12 +881,12 @@ async def generate_quizzes(lesson_data: dict, difficulty: str, trace=None) -> li
         )
         raise ValueError(f"Failed to parse quiz JSON: {e}")
 
-    quizzes = validate_quizzes(quiz_data, scene_count, difficulty)
+    quizzes = validate_quizzes(quiz_data, scene_count, difficulty, expected_scenes=indices)
 
     trace_agent_call(
         trace, agent_name="quiz_generator", input_text=prompt[:500],
         output_text=quiz_text[:5000], latency_ms=quiz_ms,
-        metadata={"scene_count": scene_count, "quiz_count": len(quizzes)},
+        metadata={"scene_count": scene_count, "quiz_count": len(quizzes), "checkpoint_indices": indices},
     )
 
     return quizzes

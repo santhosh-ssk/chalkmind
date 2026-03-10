@@ -4,6 +4,8 @@
 import { useState, useRef, useCallback } from 'react';
 import type { QuizQuestion, QuizAnswer, QuizResults, SceneQuiz } from '../types/lesson';
 
+const QUIZ_TIMER = Number(import.meta.env.VITE_QUIZ_TIMER_SECONDS) || 6;
+
 export type QuizState = 'idle' | 'intro' | 'reading' | 'waiting' | 'answered' | 'reveal';
 
 interface UseQuizOptions {
@@ -15,7 +17,7 @@ export function useQuiz({ quizzes, onSendAnswer }: UseQuizOptions) {
   const [quizState, setQuizState] = useState<QuizState>('idle');
   const [currentScene, setCurrentScene] = useState(-1);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [timeRemaining, setTimeRemaining] = useState(15);
+  const [timeRemaining, setTimeRemaining] = useState(QUIZ_TIMER);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [answers, setAnswers] = useState<QuizAnswer[]>([]);
   const [sceneAnswers, setSceneAnswers] = useState<QuizAnswer[]>([]);
@@ -106,7 +108,7 @@ export function useQuiz({ quizzes, onSendAnswer }: UseQuizOptions) {
   );
 
   const startTimer = useCallback(() => {
-    setTimeRemaining(15);
+    setTimeRemaining(QUIZ_TIMER);
     answerSentRef.current = false;
     setSelectedOption(null);
     setQuizState('waiting');
@@ -115,7 +117,7 @@ export function useQuiz({ quizzes, onSendAnswer }: UseQuizOptions) {
     const start = Date.now();
     timerRef.current = setInterval(() => {
       const elapsed = Math.floor((Date.now() - start) / 1000);
-      const remaining = Math.max(0, 15 - elapsed);
+      const remaining = Math.max(0, QUIZ_TIMER - elapsed);
       setTimeRemaining(remaining);
 
       if (remaining <= 0) {
@@ -160,7 +162,7 @@ export function useQuiz({ quizzes, onSendAnswer }: UseQuizOptions) {
 
   const setQuestionReady = useCallback(
     (_scene: number, questionIndex: number) => {
-      console.log(`[Quiz] quiz_question_ready: Q${questionIndex} — starting 15s timer`);
+      console.log(`[Quiz] quiz_question_ready: Q${questionIndex} — starting ${QUIZ_TIMER}s timer`);
       startTimer();
     },
     [startTimer],

@@ -27,6 +27,8 @@ cp .env.example .env
 | `LANGFUSE_SECRET_KEY` | Langfuse secret key (backend tracing) | `sk-lf-...` |
 | `LANGFUSE_PUBLIC_KEY` | Langfuse public key (backend tracing) | `pk-lf-...` |
 | `LANGFUSE_BASE_URL` | Langfuse host URL | `https://cloud.langfuse.com` |
+| `QUIZ_TIMER_SECONDS` | Seconds per quiz question (backend voice agent) | `6` |
+| `VITE_QUIZ_TIMER_SECONDS` | Seconds per quiz question (frontend timer) | `6` |
 
 > `VITE_` prefixed variables are baked into the frontend at build time by Vite. All others are backend runtime variables.
 
@@ -96,5 +98,7 @@ Public values passed as Docker build args for the frontend build:
 | `RECAPTCHA_ENABLED` | Enable reCAPTCHA on Cloud Run | `true` |
 | `LANGFUSE_BASE_URL` | Langfuse host URL for Cloud Run | `https://cloud.langfuse.com` |
 | `RATE_LIMIT` | API rate limit for Cloud Run | `1/30seconds` |
+| `VITE_QUIZ_TIMER_SECONDS` | Quiz timer (frontend build arg) | `6` |
+| `QUIZ_TIMER_SECONDS` | Quiz timer (Cloud Run env var) | `6` |
 
 > `VITE_*` variables are baked into the frontend at Docker build time. The rest are passed as Cloud Run env vars at deploy time. None are secrets — use GitHub Variables (not Secrets) so they appear in build logs for debugging.

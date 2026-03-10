@@ -1,6 +1,10 @@
 """Narration agent factory — creates an ADK Agent that narrates lesson steps."""
 
+import os
+
 from google.adk.agents import Agent
+
+QUIZ_TIMER_SECONDS = int(os.getenv("QUIZ_TIMER_SECONDS", "6"))
 
 
 def create_narration_agent(lesson_data: dict) -> Agent:
@@ -27,7 +31,7 @@ def create_narration_agent(lesson_data: dict) -> Agent:
         for quiz in quizzes:
             scene = quiz.get("scene", 0)
             scene_title = quiz.get("scene_title", f"Scene {scene + 1}")
-            quiz_parts.append(f"\nQuiz for Scene {scene} ({scene_title}):")
+            quiz_parts.append(f"\nQuiz after Scene {scene} — cumulative ({scene_title}):")
             for qi, q in enumerate(quiz.get("questions", [])):
                 opts = " | ".join(f"{o['label']}: {o['text']}" for o in q.get("options", []))
                 quiz_parts.append(f"  Q{qi+1}: {q['question']}")
@@ -63,7 +67,7 @@ RULES:
 QUIZ RULES (when prompted to do quiz activities):
 9. When told to introduce a quiz: say a brief, encouraging intro (1-2 sentences) and STOP.
 10. When told to read a question: read the question clearly, then read all 4 options
-    (say the letter and the text), say "You have 15 seconds", and STOP.
+    (say the letter and the text), say "You have {QUIZ_TIMER_SECONDS} seconds", and STOP.
 11. Do NOT reveal answers after individual questions. Wait for the batch reveal prompt.
 12. When told to reveal all answers (batch): narrate all results in sequence.
     Be encouraging — celebrate correct answers, gently correct wrong ones.
