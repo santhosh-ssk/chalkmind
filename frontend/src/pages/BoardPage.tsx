@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useLesson } from '../hooks/useLesson';
 import { usePlayback } from '../hooks/usePlayback';
+import { useVoiceSession } from '../hooks/useVoiceSession';
 import { trackEvent } from '../utils/analytics';
 import ChalkboardCanvas from '../components/board/ChalkboardCanvas';
 
@@ -39,8 +40,42 @@ export default function BoardPage() {
     recaptchaToken,
   });
   const totalSteps = lessonState.status === 'success' ? lessonState.lesson.steps.length : 0;
-  const { currentStep, stepProgress, isPlaying, speed, play, pause, reset, jumpTo, setSpeed } =
+  const { currentStep, stepProgress, isPlaying, speed, play, pause, reset, jumpTo, setStep, setSpeed } =
     usePlayback(totalSteps);
+
+  // Voice session — drives playback via setStep
+  const [voiceMode, setVoiceMode] = useState<'pending' | 'active' | 'fallback' | 'complete'>('pending');
+  const voiceStartedRef = useRef(false);
+
+  const onAdvanceStep = useCallback(
+    (step: number) => {
+      setStep(step);
+    },
+    [setStep],
+  );
+
+  const onNarrationComplete = useCallback(() => {
+    setVoiceMode('complete');
+  }, []);
+
+  const voice = useVoiceSession({ onAdvanceStep, onNarrationComplete });
+
+  // Auto-start voice when lesson loads
+  useEffect(() => {
+    if (lessonState.status === 'success' && !voiceStartedRef.current) {
+      voiceStartedRef.current = true;
+      voice.startSession(lessonState.lesson).then(() => {
+        setVoiceMode('active');
+      });
+    }
+  }, [lessonState.status]);
+
+  // Fall back to silent mode if voice errors
+  useEffect(() => {
+    if (voice.status === 'error' && voiceMode !== 'fallback') {
+      setVoiceMode('fallback');
+    }
+  }, [voice.status, voiceMode]);
 
   // Track lesson_error once when error state is reached
   const errorTracked = useRef(false);
@@ -232,6 +267,7 @@ export default function BoardPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
             onClick={() => {
+              voice.stopSession();
               reset();
               navigate('/');
             }}
@@ -382,9 +418,32 @@ export default function BoardPage() {
           {/* Playback controls */}
           <div style={{ padding: '12px 14px', borderTop: '1px solid #2a2e2a' }}>
             <div style={{ display: 'flex', gap: 6 }}>
-              {!isPlaying ? (
+              {voiceMode === 'active' && voice.status === 'narrating' ? (
+                <button
+                  onClick={() => {
+                    voice.stopSession();
+                    setVoiceMode('fallback');
+                    reset();
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '11px',
+                    borderRadius: 8,
+                    background: '#3a2d1a',
+                    border: 'none',
+                    color: '#f0a050',
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  Stop Voice
+                </button>
+              ) : !isPlaying ? (
                 <button
                   onClick={play}
+                  disabled={voiceMode === 'active' && voice.status === 'connecting'}
                   style={{
                     flex: 1,
                     padding: '11px',
@@ -396,6 +455,7 @@ export default function BoardPage() {
                     fontSize: 13,
                     fontWeight: 600,
                     fontFamily: 'inherit',
+                    opacity: voiceMode === 'active' && voice.status === 'connecting' ? 0.4 : 1,
                   }}
                 >
                   {currentStep >= totalSteps - 1 ? '⟲ Replay' : '▶ Play'}
@@ -420,7 +480,13 @@ export default function BoardPage() {
                 </button>
               )}
               <button
-                onClick={reset}
+                onClick={() => {
+                  if (voice.status === 'narrating') {
+                    voice.stopSession();
+                    setVoiceMode('fallback');
+                  }
+                  reset();
+                }}
                 style={{
                   padding: '11px 14px',
                   borderRadius: 8,
@@ -453,60 +519,95 @@ export default function BoardPage() {
               flexShrink: 0,
             }}
           >
-            {narration ? (
-              <>
-                <div
-                  style={{
-                    width: 30,
-                    height: 30,
-                    borderRadius: '50%',
-                    flexShrink: 0,
-                    background: 'linear-gradient(135deg, #2d5a3d, #4a9a6a)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 13,
-                  }}
-                >
-                  <span
-                    style={{
-                      animation: isPlaying ? 'pulse 1.5s ease-in-out infinite' : 'none',
-                    }}
-                  >
-                    🎙
-                  </span>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div
-                    style={{
-                      fontSize: 15,
-                      lineHeight: 1.55,
-                      color: '#d4dcd4',
-                      fontFamily: "'Caveat', cursive",
-                      fontWeight: 500,
-                    }}
-                  >
-                    "{narration}"
-                  </div>
-                  {currentSceneTitle && lesson.scene_count > 1 && (
+            {(() => {
+              const isVoiceActive = voiceMode === 'active' && voice.status === 'narrating';
+              const displayText = isVoiceActive && voice.liveTranscript
+                ? voice.liveTranscript
+                : narration;
+
+              if (displayText) {
+                return (
+                  <>
                     <div
                       style={{
-                        fontSize: 10,
-                        color: '#5a6a5a',
-                        marginTop: 2,
-                        fontFamily: "'JetBrains Mono', monospace",
+                        width: 30,
+                        height: 30,
+                        borderRadius: '50%',
+                        flexShrink: 0,
+                        background: isVoiceActive
+                          ? 'linear-gradient(135deg, #3d6a4d, #5cb85c)'
+                          : 'linear-gradient(135deg, #2d5a3d, #4a9a6a)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 13,
                       }}
                     >
-                      {currentSceneTitle}
+                      <span
+                        style={{
+                          animation: isVoiceActive || isPlaying ? 'pulse 1.5s ease-in-out infinite' : 'none',
+                        }}
+                      >
+                        {isVoiceActive ? '\uD83D\uDD0A' : '\uD83C\uDF99'}
+                      </span>
                     </div>
-                  )}
+                    <div style={{ flex: 1 }}>
+                      <div
+                        style={{
+                          fontSize: 15,
+                          lineHeight: 1.55,
+                          color: '#d4dcd4',
+                          fontFamily: "'Caveat', cursive",
+                          fontWeight: 500,
+                        }}
+                      >
+                        "{displayText}"
+                      </div>
+                      {currentSceneTitle && lesson.scene_count > 1 && (
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: '#5a6a5a',
+                            marginTop: 2,
+                            fontFamily: "'JetBrains Mono', monospace",
+                          }}
+                        >
+                          {currentSceneTitle}
+                          {isVoiceActive && (
+                            <span style={{ marginLeft: 8, color: '#5cb85c' }}>
+                              voice narrating
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              }
+
+              // No narration yet
+              if (voice.status === 'connecting') {
+                return (
+                  <div style={{ fontSize: 13, color: '#f5c842', fontStyle: 'italic' }}>
+                    Connecting voice...
+                  </div>
+                );
+              }
+              if (voiceMode === 'complete') {
+                return (
+                  <div style={{ fontSize: 13, color: '#5cb85c', fontStyle: 'italic' }}>
+                    Lesson complete!
+                  </div>
+                );
+              }
+              return (
+                <div style={{ fontSize: 13, color: '#4a4e4a', fontStyle: 'italic' }}>
+                  {voiceMode === 'fallback'
+                    ? 'Press Play to start (silent mode).'
+                    : 'Starting voice narration...'}
                 </div>
-              </>
-            ) : (
-              <div style={{ fontSize: 13, color: '#4a4e4a', fontStyle: 'italic' }}>
-                Press Play to start, or click any step.
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           {/* Canvas */}

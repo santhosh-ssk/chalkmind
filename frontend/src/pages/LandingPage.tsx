@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
@@ -56,13 +56,18 @@ const HOW_IT_WORKS = [
 ];
 
 export default function LandingPage() {
-  const [name, setName] = useState('');
-  const [ageGroup, setAgeGroup] = useState('18-40');
-  const [difficulty, setDifficulty] = useState('beginner');
+  const [name, setName] = useState(() => localStorage.getItem('chalkmind_name') || '');
+  const [ageGroup, setAgeGroup] = useState(() => localStorage.getItem('chalkmind_ageGroup') || '18-40');
+  const [difficulty, setDifficulty] = useState(() => localStorage.getItem('chalkmind_difficulty') || 'beginner');
   const [topic, setTopic] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const navigate = useNavigate();
   const { executeRecaptcha } = useRecaptcha();
+
+  // Persist preferences to localStorage
+  useEffect(() => { localStorage.setItem('chalkmind_name', name); }, [name]);
+  useEffect(() => { localStorage.setItem('chalkmind_ageGroup', ageGroup); }, [ageGroup]);
+  useEffect(() => { localStorage.setItem('chalkmind_difficulty', difficulty); }, [difficulty]);
 
   const handleStart = async () => {
     const formErrors = validateForm({ name, topic });

@@ -93,8 +93,37 @@ export function usePlayback(totalSteps: number) {
     [cancelAnim],
   );
 
+  // Voice-driven: externally set the current step (auto-animates progress)
+  const setStep = useCallback(
+    (step: number) => {
+      cancelAnim();
+      setCurrentStep(step);
+      setStepProgress(0);
+      // Animate this step's drawing progress
+      startRef.current = performance.now();
+      setIsPlaying(true);
+      playingRef.current = true;
+      const tick = (now: number) => {
+        if (!playingRef.current) return;
+        const elapsed = now - startRef.current;
+        const p = Math.min(elapsed / STEP_DURATION, 1);
+        setStepProgress(p);
+        if (p < 1) {
+          animRef.current = requestAnimationFrame(tick);
+        } else {
+          // Step drawing done — stay at progress=1, stop animating
+          // (voice session will advance when narration completes)
+          setIsPlaying(false);
+          playingRef.current = false;
+        }
+      };
+      animRef.current = requestAnimationFrame(tick);
+    },
+    [cancelAnim],
+  );
+
   // Cleanup on unmount
   useEffect(() => cancelAnim, [cancelAnim]);
 
-  return { currentStep, stepProgress, isPlaying, speed, play, pause, reset, jumpTo, setSpeed };
+  return { currentStep, stepProgress, isPlaying, speed, play, pause, reset, jumpTo, setStep, setSpeed };
 }
