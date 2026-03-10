@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useLesson } from '../hooks/useLesson';
 import { usePlayback } from '../hooks/usePlayback';
 import ChalkboardCanvas from '../components/board/ChalkboardCanvas';
@@ -16,8 +16,27 @@ export default function BoardPage() {
   const { topic: rawTopic } = useParams<{ topic: string }>();
   const topic = decodeURIComponent(rawTopic || '');
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const lessonState = useLesson(topic);
+  // Read personalization from router state, fall back to defaults
+  const routerState = (location.state || {}) as {
+    name?: string;
+    ageGroup?: string;
+    difficulty?: string;
+    recaptchaToken?: string;
+  };
+  const learnerName = routerState.name || 'Learner';
+  const ageGroup = routerState.ageGroup || '18-40';
+  const difficulty = routerState.difficulty || 'beginner';
+  const recaptchaToken = routerState.recaptchaToken || '';
+
+  const lessonState = useLesson({
+    topic,
+    name: learnerName,
+    ageGroup,
+    difficulty,
+    recaptchaToken,
+  });
   const totalSteps = lessonState.status === 'success' ? lessonState.lesson.steps.length : 0;
   const { currentStep, stepProgress, isPlaying, speed, play, pause, reset, jumpTo, setSpeed } =
     usePlayback(totalSteps);
@@ -68,7 +87,7 @@ export default function BoardPage() {
             fontWeight: 600,
           }}
         >
-          Creating your lesson...
+          Creating your lesson, {learnerName}...
         </div>
         <div style={{ fontSize: 14, color: '#e8e4d9' }}>"{topic}"</div>
         <div style={{ fontSize: 13, color: '#4a5a4a', minHeight: 20 }}>{LOADING_MESSAGES[loadingMsgIdx]}</div>

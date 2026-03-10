@@ -1,7 +1,9 @@
 """Generate whiteboard lessons using Gemini and the Drawing DSL."""
 
 import json
+import logging
 import re
+import time
 import uuid
 
 from google.adk.agents import Agent
@@ -481,9 +483,40 @@ def validate_and_flatten(data: dict) -> dict:
     }
 
 
-async def generate_lesson(topic: str) -> dict:
+AGE_GROUP_GUIDELINES = {
+    "1-5": "very simple, concrete, playful language, everyday analogies, short sentences",
+    "6-10": "simple concepts, relatable examples, curiosity-driven, fun tone",
+    "10-18": "scientific terminology, processes, real-world applications, engaging",
+    "18-40": "full complexity, technical depth, professional tone",
+    "40-60": "clear explanations, practical applications, balanced depth",
+    "60+": "patient pacing, clear language, relatable context, no jargon",
+}
+
+DIFFICULTY_GUIDELINES = {
+    "beginner": "foundational concepts, minimal prerequisites, define all terms",
+    "intermediate": "build on basics, introduce nuance, some technical vocabulary",
+    "advanced": "deep analysis, edge cases, expert-level detail, assume prior knowledge",
+}
+
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+
+
+async def generate_lesson(
+    topic: str,
+    name: str = "Learner",
+    age_group: str = "18-40",
+    difficulty: str = "beginner",
+) -> dict:
     """Generate a whiteboard lesson: research with web grounding, then generate structured lesson."""
     user_id = "system"
+    t0 = time.time()
+
+    age_guide = AGE_GROUP_GUIDELINES.get(age_group, AGE_GROUP_GUIDELINES["18-40"])
+    diff_guide = DIFFICULTY_GUIDELINES.get(difficulty, DIFFICULTY_GUIDELINES["beginner"])
+
+    logger.info("=== generate_lesson START === topic=%s name=%s age=%s diff=%s", topic, name, age_group, difficulty)
 
     # ── Step 1: Research with web grounding ──────────────────
     research_session_id = str(uuid.uuid4())
@@ -491,18 +524,33 @@ async def generate_lesson(topic: str) -> dict:
         app_name="chalkmind", user_id=user_id, session_id=research_session_id
     )
 
+    audience_context = (
+        f"\n\nAUDIENCE: Learner named {name}, age group {age_group}, difficulty: {difficulty}.\n"
+        f"Age group guidelines: {age_guide}\n"
+        f"Difficulty guidelines: {diff_guide}\n"
+        f"Tailor the depth and complexity of research accordingly."
+    )
+
+    logger.info("[RESEARCH] Starting research agent...")
+    t1 = time.time()
     research_text = ""
+    event_count = 0
     async for event in _research_runner.run_async(
         user_id=user_id,
         session_id=research_session_id,
         new_message=types.Content(
-            parts=[types.Part(text=f"Research this topic for an educational lesson: {topic}")]
+            parts=[types.Part(text=f"Research this topic for an educational lesson: {topic}{audience_context}")]
         ),
     ):
+        event_count += 1
         if event.content and event.content.parts:
             for part in event.content.parts:
                 if part.text and not getattr(part, "thought", False):
                     research_text += part.text
+        if event_count % 5 == 0:
+            logger.info("[RESEARCH] ... %d events received so far (%.1fs)", event_count, time.time() - t1)
+
+    logger.info("[RESEARCH] Done in %.1fs — %d events, %d chars of research text", time.time() - t1, event_count, len(research_text))
 
     if not research_text.strip():
         raise ValueError("Research agent returned no results")
@@ -513,7 +561,19 @@ async def generate_lesson(topic: str) -> dict:
         app_name="chalkmind", user_id=user_id, session_id=lesson_session_id
     )
 
+    personalization = (
+        f"\n\nPERSONALIZATION:\n"
+        f"- Address learner as {name} occasionally in narrations\n"
+        f"- Adjust vocabulary and sentence complexity for age {age_group} + {difficulty}\n"
+        f"- Age group style: {age_guide}\n"
+        f"- Difficulty style: {diff_guide}\n"
+        f"- IMPORTANT: JSON output format must remain exactly the same"
+    )
+
+    logger.info("[LESSON] Starting lesson generation agent...")
+    t2 = time.time()
     lesson_text = ""
+    event_count = 0
     async for event in _lesson_runner.run_async(
         user_id=user_id,
         session_id=lesson_session_id,
@@ -522,19 +582,28 @@ async def generate_lesson(topic: str) -> dict:
                 f"Use this research to create an accurate, up-to-date lesson:\n\n"
                 f"---RESEARCH---\n{research_text}\n---END RESEARCH---\n\n"
                 f"Create a visual whiteboard lesson about: {topic}"
+                f"{personalization}"
             ))]
         ),
     ):
+        event_count += 1
         if event.content and event.content.parts:
             for part in event.content.parts:
                 if part.text and not getattr(part, "thought", False):
                     lesson_text += part.text
+        if event_count % 5 == 0:
+            logger.info("[LESSON] ... %d events received so far (%.1fs)", event_count, time.time() - t2)
+
+    logger.info("[LESSON] Done in %.1fs — %d events, %d chars of lesson text", time.time() - t2, event_count, len(lesson_text))
 
     # ── Parse & validate ─────────────────────────────────────
     lesson_text = strip_fences(lesson_text)
     try:
         data = json.loads(lesson_text)
     except json.JSONDecodeError as e:
+        logger.error("[PARSE] Failed to parse JSON: %s — first 500 chars: %s", e, lesson_text[:500])
         raise ValueError(f"Failed to parse lesson JSON: {e}")
 
-    return validate_and_flatten(data)
+    result = validate_and_flatten(data)
+    logger.info("=== generate_lesson DONE === total %.1fs, %d steps", time.time() - t0, len(result["steps"]))
+    return result

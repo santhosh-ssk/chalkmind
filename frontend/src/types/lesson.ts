@@ -114,3 +114,11 @@ export interface Lesson {
   steps: LessonStep[];
   scene_count: number;
 }
+
+export interface LessonParams {
+  topic: string;
+  name: string;
+  ageGroup: string;
+  difficulty: string;
+  recaptchaToken: string;
+}

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import type { Lesson } from '../types/lesson';
+import type { Lesson, LessonParams } from '../types/lesson';
 
 type LessonState =
   | { status: 'loading' }
   | { status: 'success'; lesson: Lesson }
   | { status: 'error'; message: string };
 
-export function useLesson(topic: string): LessonState & { retry: () => void } {
+export function useLesson(params: LessonParams): LessonState & { retry: () => void } {
   const [state, setState] = useState<LessonState>({ status: 'loading' });
   const [retryCount, setRetryCount] = useState(0);
 
@@ -17,14 +17,29 @@ export function useLesson(topic: string): LessonState & { retry: () => void } {
     fetch('/api/generate-lesson', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic }),
+      body: JSON.stringify({
+        topic: params.topic,
+        name: params.name,
+        age_group: params.ageGroup,
+        difficulty: params.difficulty,
+        recaptcha_token: params.recaptchaToken,
+      }),
       signal: controller.signal,
     })
       .then((res) => {
         if (!res.ok) {
           return res.json().then(
             (body) => {
-              throw new Error(body.detail || `Server error (${res.status})`);
+              const detail = body.detail;
+              let message: string;
+              if (typeof detail === 'string') {
+                message = detail;
+              } else if (Array.isArray(detail)) {
+                message = detail.map((e: { msg?: string }) => e.msg || '').join(', ');
+              } else {
+                message = `Server error (${res.status})`;
+              }
+              throw new Error(message);
             },
             () => {
               throw new Error(`Server error (${res.status})`);
@@ -42,7 +57,7 @@ export function useLesson(topic: string): LessonState & { retry: () => void } {
       });
 
     return () => controller.abort();
-  }, [topic, retryCount]);
+  }, [params.topic, params.name, params.ageGroup, params.difficulty, params.recaptchaToken, retryCount]);
 
   const retry = () => setRetryCount((c) => c + 1);
 
