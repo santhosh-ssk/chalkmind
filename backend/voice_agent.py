@@ -19,6 +19,22 @@ def create_narration_agent(lesson_data: dict) -> Agent:
     lesson_context = "\n".join(steps_summary)
     total_steps = len(lesson_data.get("steps", []))
 
+    # Build quiz context if available
+    quiz_context = ""
+    quizzes = lesson_data.get("quizzes", [])
+    if quizzes:
+        quiz_parts = []
+        for quiz in quizzes:
+            scene = quiz.get("scene", 0)
+            scene_title = quiz.get("scene_title", f"Scene {scene + 1}")
+            quiz_parts.append(f"\nQuiz for Scene {scene} ({scene_title}):")
+            for qi, q in enumerate(quiz.get("questions", [])):
+                opts = " | ".join(f"{o['label']}: {o['text']}" for o in q.get("options", []))
+                quiz_parts.append(f"  Q{qi+1}: {q['question']}")
+                quiz_parts.append(f"    {opts}")
+                quiz_parts.append(f"    Answer: {q['correct']}")
+        quiz_context = "\n\nQUIZ QUESTIONS:\n" + "\n".join(quiz_parts)
+
     instruction = f"""You are ChalkMind, a warm and engaging whiteboard tutor.
 You are narrating a visual lesson that is being drawn on a chalkboard in real-time.
 The learner sees animated drawings appearing as you speak.
@@ -28,6 +44,7 @@ TOTAL STEPS: {total_steps}
 
 FULL LESSON PLAN:
 {lesson_context}
+{quiz_context}
 
 RULES:
 1. When told to narrate a step, speak the narration provided — that is your script.
@@ -41,7 +58,17 @@ RULES:
 6. For the LAST step, end with a brief wrap-up (one short sentence).
 7. Do NOT describe the drawings explicitly (e.g., "as you can see on the board...").
    The learner already sees them. Just explain the concepts.
-8. Keep each step to roughly 5-15 seconds of speech. Be concise — do not ramble."""
+8. Keep each step to roughly 5-15 seconds of speech. Be concise — do not ramble.
+
+QUIZ RULES (when prompted to do quiz activities):
+9. When told to introduce a quiz: say a brief, encouraging intro (1-2 sentences) and STOP.
+10. When told to read a question: read the question clearly, then read all 4 options
+    (say the letter and the text), say "You have 15 seconds", and STOP.
+11. Do NOT reveal answers after individual questions. Wait for the batch reveal prompt.
+12. When told to reveal all answers (batch): narrate all results in sequence.
+    Be encouraging — celebrate correct answers, gently correct wrong ones.
+    Keep each reveal to 1-2 sentences. End with the overall score and STOP.
+13. Keep quiz narration concise and upbeat — maintain the friendly tutor tone."""
 
     return Agent(
         name="narration_agent",

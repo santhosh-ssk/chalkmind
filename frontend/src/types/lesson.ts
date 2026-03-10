@@ -113,6 +113,7 @@ export interface Lesson {
   title: string;
   steps: LessonStep[];
   scene_count: number;
+  quizzes?: SceneQuiz[];
 }
 
 export interface LessonParams {
@@ -121,4 +122,47 @@ export interface LessonParams {
   ageGroup: string;
   difficulty: string;
   recaptchaToken: string;
+}
+
+/* ── Quiz types ────────────────────────────────────── */
+
+export interface QuizOption {
+  label: string;
+  text: string;
+}
+
+export interface QuizQuestion {
+  question: string;
+  options: QuizOption[];
+  correct: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  explanation: string;
+}
+
+export interface SceneQuiz {
+  scene: number;
+  scene_title: string;
+  questions: QuizQuestion[];
+}
+
+export interface QuizAnswer {
+  scene: number;
+  questionIndex: number;
+  selected: string | null;
+  correct: string;
+  isCorrect: boolean;
+}
+
+export interface QuizResults {
+  totalQuestions: number;
+  correctCount: number;
+  score: number; // 0-100
+  passed: boolean; // score >= 70
+  perScene: {
+    scene: number;
+    sceneTitle: string;
+    correct: number;
+    total: number;
+  }[];
+  answers: QuizAnswer[];
 }

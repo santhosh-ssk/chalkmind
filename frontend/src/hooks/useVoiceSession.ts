@@ -3,6 +3,7 @@
  * and audio playback (24kHz). Listen-only: no mic capture.
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
+import type { QuizQuestion } from '../types/lesson';
 
 export type VoiceStatus = 'idle' | 'connecting' | 'narrating' | 'complete' | 'error';
 
@@ -11,9 +12,31 @@ interface Transcript {
   text: string;
 }
 
+interface QuizResultAnswer {
+  scene: number;
+  question_index: number;
+  selected: string | null;
+  correct: string;
+  is_correct: boolean;
+}
+
+export interface ServerQuizResults {
+  total_questions: number;
+  correct_count: number;
+  score: number;
+  passed: boolean;
+  per_scene: { scene: number; scene_title: string; correct: number; total: number }[];
+  answers: QuizResultAnswer[];
+}
+
 interface UseVoiceSessionOptions {
   onAdvanceStep?: (step: number) => void;
-  onNarrationComplete?: () => void;
+  onNarrationComplete?: (quizResults?: ServerQuizResults) => void;
+  onStartQuiz?: (scene: number, questions: QuizQuestion[]) => void;
+  onQuizQuestion?: (scene: number, questionIndex: number) => void;
+  onQuizQuestionReady?: (scene: number, questionIndex: number) => void;
+  onQuizResults?: (scene: number, answers: QuizResultAnswer[]) => void;
+  onTurnComplete?: () => void;
 }
 
 export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
@@ -42,6 +65,23 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
     }
     playbackNodeRef.current = null;
   }, []);
+
+  const sendQuizAnswer = useCallback(
+    (scene: number, questionIndex: number, selected: string | null) => {
+      console.log(`[Voice] Sending quiz_answer: scene=${scene} Q${questionIndex} selected=${selected}`);
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({
+            type: 'quiz_answer',
+            scene,
+            question_index: questionIndex,
+            selected,
+          }),
+        );
+      }
+    },
+    [],
+  );
 
   const startSession = useCallback(
     async (lesson: Record<string, unknown>) => {
@@ -83,6 +123,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
 
             switch (msg.type) {
               case 'advance_step':
+                console.log(`[Voice] advance_step: ${msg.step}`);
                 setCurrentNarrationStep(msg.step);
                 // Finalize any accumulated transcript
                 if (currentModelTextRef.current) {
@@ -104,15 +145,37 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
                 break;
 
               case 'interrupted':
-                // Flush playback buffer
+                console.log('[Voice] interrupted');
                 playbackNodeRef.current?.port.postMessage({ command: 'endOfAudio' });
                 break;
 
               case 'turn_complete':
-                // Transcript accumulation finalized on next advance_step
+                console.log('[Voice] turn_complete');
+                optionsRef.current.onTurnComplete?.();
+                break;
+
+              case 'start_quiz':
+                console.log(`[Voice] start_quiz: scene=${msg.scene}, ${msg.questions?.length} questions`);
+                optionsRef.current.onStartQuiz?.(msg.scene, msg.questions);
+                break;
+
+              case 'quiz_question':
+                console.log(`[Voice] quiz_question: scene=${msg.scene} Q${msg.question_index}`);
+                optionsRef.current.onQuizQuestion?.(msg.scene, msg.question_index);
+                break;
+
+              case 'quiz_question_ready':
+                console.log(`[Voice] quiz_question_ready: scene=${msg.scene} Q${msg.question_index}`);
+                optionsRef.current.onQuizQuestionReady?.(msg.scene, msg.question_index);
+                break;
+
+              case 'quiz_results':
+                console.log(`[Voice] quiz_results: scene=${msg.scene}`, msg.answers);
+                optionsRef.current.onQuizResults?.(msg.scene, msg.answers);
                 break;
 
               case 'narration_complete':
+                console.log('[Voice] narration_complete', msg.quiz_results ? `score=${msg.quiz_results.score}%` : 'no quiz');
                 // Finalize last transcript
                 if (currentModelTextRef.current) {
                   setTranscript((prev) => [
@@ -122,7 +185,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
                   currentModelTextRef.current = '';
                 }
                 setStatus('complete');
-                optionsRef.current.onNarrationComplete?.();
+                optionsRef.current.onNarrationComplete?.(msg.quiz_results ?? undefined);
                 break;
 
               case 'error':
@@ -134,12 +197,14 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
         };
 
         ws.onerror = () => {
+          console.error('[Voice] WebSocket error');
           setStatus('error');
         };
 
-        ws.onclose = () => {
+        ws.onclose = (ev) => {
+          console.log(`[Voice] WebSocket closed: code=${ev.code}`);
           if (status !== 'complete' && status !== 'error') {
-            setStatus('idle');
+            setStatus('error');
           }
         };
       } catch (err) {
@@ -168,5 +233,6 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
     liveTranscript,
     startSession,
     stopSession,
+    sendQuizAnswer,
   };
 }

@@ -122,6 +122,9 @@ async def voice_websocket(websocket: WebSocket, session_id: str):
     total_steps = len(lesson_data.get("steps", []))
     voice_session = VoiceSession(lesson_data)
 
+    # Lock for voice_session state mutations (both tasks modify state)
+    session_lock = asyncio.Lock()
+
     # Create agent + runner for this session
     agent_create_ts = _time.time()
     agent = create_narration_agent(lesson_data)
@@ -174,17 +177,59 @@ async def voice_websocket(websocket: WebSocket, session_id: str):
     step_start_ts = _time.time()
 
     async def upstream_task():
-        """Client -> Server: keep WebSocket receive loop alive for disconnect detection."""
+        """Client -> Server: handle text input and quiz answers."""
         try:
             while True:
                 message = await websocket.receive()
                 if "text" in message:
                     msg_data = json.loads(message["text"])
-                    if msg_data.get("type") == "text_input":
+                    msg_type = msg_data.get("type")
+
+                    if msg_type == "text_input":
                         content = types.Content(
                             parts=[types.Part(text=msg_data["text"])],
                         )
                         live_request_queue.send_content(content)
+
+                    elif msg_type == "quiz_answer":
+                        selected = msg_data.get("selected")  # string or null
+                        async with session_lock:
+                            result = voice_session.on_quiz_answer(selected)
+
+                        action = result.get("action")
+                        if action == "next_question":
+                            # Send next question event to frontend + prompt to agent
+                            await websocket.send_text(json.dumps({
+                                "type": "quiz_question",
+                                "scene": result["scene"],
+                                "question_index": result["question_index"],
+                            }))
+                            live_request_queue.send_content(
+                                types.Content(parts=[types.Part(text=result["prompt"])])
+                            )
+                            trace_agent_call(
+                                trace, f"quiz-answer-{msg_data.get('question_index', '?')}",
+                                f"selected={selected}", f"next_question",
+                                0, metadata={"scene": result.get("scene")},
+                            )
+
+                        elif action == "batch_reveal":
+                            # Send results to frontend + reveal prompt to agent
+                            await websocket.send_text(json.dumps({
+                                "type": "quiz_results",
+                                "scene": voice_session.current_quiz_scene,
+                                "answers": result["answers"],
+                            }))
+                            live_request_queue.send_content(
+                                types.Content(parts=[types.Part(text=result["prompt"])])
+                            )
+                            trace_agent_call(
+                                trace, "quiz-reveal",
+                                f"scene={voice_session.current_quiz_scene}",
+                                json.dumps(result["answers"]),
+                                0, metadata={"scene": voice_session.current_quiz_scene},
+                            )
+
         except WebSocketDisconnect:
             logger.info("Voice client disconnected (upstream)")
 
@@ -204,36 +249,111 @@ async def voice_websocket(websocket: WebSocket, session_id: str):
 
                 if event.turn_complete:
                     step_ms = (_time.time() - step_start_ts) * 1000
-                    logger.info("Voice: TURN COMPLETE (step %d, %.0fms)", voice_session.current_step, step_ms)
+                    logger.info("Voice: TURN COMPLETE (step %d, state=%s, %.0fms)",
+                                voice_session.current_step, voice_session.state, step_ms)
                     await websocket.send_text(json.dumps({"type": "turn_complete"}))
 
                     trace_agent_call(
                         trace, f"narrate-step-{voice_session.current_step}",
-                        f"step {voice_session.current_step}/{total_steps}",
+                        f"step {voice_session.current_step}/{total_steps} state={voice_session.state}",
                         "turn_complete", step_ms,
-                        metadata={"step": voice_session.current_step},
+                        metadata={"step": voice_session.current_step, "state": voice_session.state},
                     )
 
-                    # Advance to next step or complete
-                    result = voice_session.on_turn_complete()
+                    # Process turn_complete through state machine
+                    async with session_lock:
+                        result = voice_session.on_turn_complete()
+
                     if result is None:
-                        total_ms = (_time.time() - session_start_ts) * 1000
-                        logger.info("Voice: NARRATION COMPLETE (total %.0fms)", total_ms)
-                        trace_agent_call(
-                            trace, "voice-session-complete",
-                            f"{total_steps} steps", "narration_complete", total_ms,
-                            metadata={"total_steps": total_steps},
-                        )
-                        flush_traces()
-                        await websocket.send_text(json.dumps({"type": "narration_complete"}))
-                    else:
-                        step_start_ts = _time.time()
+                        continue
+
+                    action = result.get("action")
+                    step_start_ts = _time.time()
+
+                    if action == "advance_step":
                         await websocket.send_text(
-                            json.dumps({"type": "advance_step", "step": result["advance_step"]})
+                            json.dumps({"type": "advance_step", "step": result["step"]})
                         )
                         live_request_queue.send_content(
                             types.Content(parts=[types.Part(text=result["prompt"])])
                         )
+
+                    elif action == "start_quiz":
+                        await websocket.send_text(json.dumps({
+                            "type": "start_quiz",
+                            "scene": result["scene"],
+                            "questions": result["questions"],
+                        }))
+                        live_request_queue.send_content(
+                            types.Content(parts=[types.Part(text=result["prompt"])])
+                        )
+                        trace_agent_call(
+                            trace, f"quiz-start-scene-{result['scene']}",
+                            f"scene {result['scene']}", "start_quiz",
+                            0, metadata={"scene": result["scene"]},
+                        )
+
+                    elif action == "quiz_question":
+                        await websocket.send_text(json.dumps({
+                            "type": "quiz_question",
+                            "scene": result["scene"],
+                            "question_index": result["question_index"],
+                        }))
+                        live_request_queue.send_content(
+                            types.Content(parts=[types.Part(text=result["prompt"])])
+                        )
+
+                    elif action == "quiz_question_ready":
+                        await websocket.send_text(json.dumps({
+                            "type": "quiz_question_ready",
+                            "scene": result["scene"],
+                            "question_index": result["question_index"],
+                        }))
+
+                    elif action == "quiz_reveal_done":
+                        next_action = result.get("next_action")
+                        if next_action and next_action.get("action") == "complete":
+                            total_ms = (_time.time() - session_start_ts) * 1000
+                            quiz_results = voice_session.get_quiz_results()
+                            logger.info("Voice: NARRATION+QUIZ COMPLETE (total %.0fms)", total_ms)
+                            trace_agent_call(
+                                trace, "voice-session-complete",
+                                f"{total_steps} steps", "narration_complete", total_ms,
+                                metadata={
+                                    "total_steps": total_steps,
+                                    "quiz_score": quiz_results.get("score") if quiz_results else None,
+                                },
+                            )
+                            flush_traces()
+                            await websocket.send_text(json.dumps({
+                                "type": "narration_complete",
+                                "quiz_results": quiz_results,
+                            }))
+                        elif next_action and next_action.get("action") == "advance_step":
+                            await websocket.send_text(
+                                json.dumps({"type": "advance_step", "step": next_action["step"]})
+                            )
+                            live_request_queue.send_content(
+                                types.Content(parts=[types.Part(text=next_action["prompt"])])
+                            )
+
+                    elif action == "complete":
+                        total_ms = (_time.time() - session_start_ts) * 1000
+                        quiz_results = voice_session.get_quiz_results()
+                        logger.info("Voice: NARRATION COMPLETE (total %.0fms)", total_ms)
+                        trace_agent_call(
+                            trace, "voice-session-complete",
+                            f"{total_steps} steps", "narration_complete", total_ms,
+                            metadata={
+                                "total_steps": total_steps,
+                                "quiz_score": quiz_results.get("score") if quiz_results else None,
+                            },
+                        )
+                        flush_traces()
+                        await websocket.send_text(json.dumps({
+                            "type": "narration_complete",
+                            "quiz_results": quiz_results,
+                        }))
 
                 if not event.content or not event.content.parts:
                     continue

@@ -14,6 +14,51 @@ from google.genai import types
 
 from backend.observability import trace_agent_call
 
+QUIZ_GENERATION_PROMPT = """You are an educational assessment expert. Given a lesson's scene narrations and topic,
+generate multiple-choice quiz questions to test comprehension.
+
+OUTPUT FORMAT — respond with ONLY valid JSON, no markdown, no backticks:
+{
+  "quizzes": [
+    {
+      "scene": 0,
+      "scene_title": "Scene title here",
+      "questions": [
+        {
+          "question": "Clear, concise question text?",
+          "options": [
+            {"label": "A", "text": "Option text"},
+            {"label": "B", "text": "Option text"},
+            {"label": "C", "text": "Option text"},
+            {"label": "D", "text": "Option text"}
+          ],
+          "correct": "A",
+          "difficulty": "easy",
+          "explanation": "Brief explanation of why the correct answer is right."
+        }
+      ]
+    }
+  ]
+}
+
+RULES:
+1. Generate EXACTLY 3 questions per scene.
+2. Questions should test what was TAUGHT in the narrations, not obscure trivia.
+3. Each question must have exactly 4 options (A, B, C, D).
+4. The correct answer must be one of A, B, C, D.
+5. Distractors should be plausible but clearly wrong to someone who understood the lesson.
+6. Explanations should be 1 sentence, reinforcing the key concept.
+7. Follow the difficulty distribution provided.
+8. Questions should progress from testing recall to testing understanding within each scene.
+9. Do NOT repeat questions across scenes.
+10. Keep question text under 100 characters and option text under 60 characters."""
+
+DIFFICULTY_DISTRIBUTIONS = {
+    "beginner": ["easy", "easy", "medium"],
+    "intermediate": ["easy", "medium", "hard"],
+    "advanced": ["medium", "medium", "hard"],
+}
+
 RESEARCH_PROMPT = """You are an educational researcher preparing material for a visual whiteboard lesson.
 The lesson will be drawn on a dark chalkboard (780x680px) with animated diagrams.
 
@@ -339,12 +384,21 @@ lesson_generator_agent = Agent(
     instruction=DSL_SYSTEM_PROMPT,
 )
 
+quiz_generator_agent = Agent(
+    name="quiz_generator",
+    model="gemini-3-flash-preview",
+    instruction=QUIZ_GENERATION_PROMPT,
+)
+
 _session_service = InMemorySessionService()
 _research_runner = Runner(
     app_name="chalkmind", agent=topic_researcher, session_service=_session_service
 )
 _lesson_runner = Runner(
     app_name="chalkmind", agent=lesson_generator_agent, session_service=_session_service
+)
+_quiz_runner = Runner(
+    app_name="chalkmind", agent=quiz_generator_agent, session_service=_session_service
 )
 
 
@@ -640,5 +694,137 @@ async def generate_lesson(
         metadata={"steps_count": len(result["steps"]), "scene_count": result.get("scene_count", 1)},
     )
 
-    logger.info("=== generate_lesson DONE === total %.1fs, %d steps", time.time() - t0, len(result["steps"]))
+    # ── Step 3: Generate quizzes ────────────────────────
+    try:
+        quizzes = await generate_quizzes(result, difficulty, trace)
+        result["quizzes"] = quizzes
+    except Exception as e:
+        logger.warning("[QUIZ] Quiz generation failed, continuing without quizzes: %s", e)
+        result["quizzes"] = []
+
+    logger.info("=== generate_lesson DONE === total %.1fs, %d steps, %d quizzes",
+                time.time() - t0, len(result["steps"]), len(result.get("quizzes", [])))
     return result
+
+
+def validate_quizzes(data: dict, scene_count: int, difficulty: str) -> list:
+    """Validate quiz JSON structure and difficulty distribution."""
+    quizzes = data.get("quizzes")
+    if not isinstance(quizzes, list):
+        raise ValueError("Quiz data must have a 'quizzes' array")
+
+    expected_dist = DIFFICULTY_DISTRIBUTIONS.get(difficulty, DIFFICULTY_DISTRIBUTIONS["beginner"])
+
+    validated = []
+    for qi, quiz in enumerate(quizzes):
+        if not isinstance(quiz, dict):
+            raise ValueError(f"Quiz {qi} must be an object")
+        scene = quiz.get("scene")
+        if not isinstance(scene, int) or scene < 0 or scene >= scene_count:
+            raise ValueError(f"Quiz {qi} has invalid scene index {scene}")
+
+        questions = quiz.get("questions")
+        if not isinstance(questions, list) or len(questions) != 3:
+            raise ValueError(f"Quiz {qi} must have exactly 3 questions, got {len(questions) if isinstance(questions, list) else 'non-list'}")
+
+        for qj, q in enumerate(questions):
+            if not isinstance(q.get("question"), str):
+                raise ValueError(f"Quiz {qi}, Q{qj} must have a 'question' string")
+            options = q.get("options")
+            if not isinstance(options, list) or len(options) != 4:
+                raise ValueError(f"Quiz {qi}, Q{qj} must have exactly 4 options")
+            labels = {o.get("label") for o in options if isinstance(o, dict)}
+            if labels != {"A", "B", "C", "D"}:
+                raise ValueError(f"Quiz {qi}, Q{qj} options must have labels A, B, C, D")
+            if q.get("correct") not in {"A", "B", "C", "D"}:
+                raise ValueError(f"Quiz {qi}, Q{qj} has invalid correct answer '{q.get('correct')}'")
+            # Ensure difficulty is valid, fix if needed
+            if q.get("difficulty") not in {"easy", "medium", "hard"}:
+                q["difficulty"] = expected_dist[qj] if qj < len(expected_dist) else "medium"
+            if not isinstance(q.get("explanation"), str):
+                q["explanation"] = ""
+
+        validated.append({
+            "scene": quiz["scene"],
+            "scene_title": quiz.get("scene_title", f"Scene {quiz['scene'] + 1}"),
+            "questions": questions,
+        })
+
+    return validated
+
+
+async def generate_quizzes(lesson_data: dict, difficulty: str, trace=None) -> list:
+    """Generate quiz questions for each scene based on lesson narrations."""
+    scene_count = lesson_data.get("scene_count", 1)
+    steps = lesson_data.get("steps", [])
+
+    # Build per-scene narration summaries
+    scene_narrations = {}
+    for step in steps:
+        si = step.get("scene", 0)
+        title = step.get("scene_title", f"Scene {si + 1}")
+        if si not in scene_narrations:
+            scene_narrations[si] = {"title": title, "narrations": []}
+        scene_narrations[si]["narrations"].append(step.get("narration", ""))
+
+    scene_text_parts = []
+    for si in sorted(scene_narrations.keys()):
+        info = scene_narrations[si]
+        narr = " ".join(info["narrations"])
+        scene_text_parts.append(f"Scene {si} ({info['title']}): {narr}")
+
+    scene_text = "\n\n".join(scene_text_parts)
+    expected_dist = DIFFICULTY_DISTRIBUTIONS.get(difficulty, DIFFICULTY_DISTRIBUTIONS["beginner"])
+    dist_desc = ", ".join(f"Q{i+1}: {d}" for i, d in enumerate(expected_dist))
+
+    prompt = (
+        f"TOPIC: {lesson_data.get('title', 'Unknown')}\n"
+        f"DIFFICULTY LEVEL: {difficulty}\n"
+        f"DIFFICULTY DISTRIBUTION per scene (3 questions each): {dist_desc}\n"
+        f"NUMBER OF SCENES: {scene_count}\n\n"
+        f"LESSON NARRATIONS BY SCENE:\n{scene_text}\n\n"
+        f"Generate quiz questions for ALL {scene_count} scenes."
+    )
+
+    quiz_session_id = str(uuid.uuid4())
+    await _session_service.create_session(
+        app_name="chalkmind", user_id="system", session_id=quiz_session_id
+    )
+
+    logger.info("[QUIZ] Starting quiz generation agent...")
+    t3 = time.time()
+    quiz_text = ""
+    event_count = 0
+    async for event in _quiz_runner.run_async(
+        user_id="system",
+        session_id=quiz_session_id,
+        new_message=types.Content(parts=[types.Part(text=prompt)]),
+    ):
+        event_count += 1
+        if event.content and event.content.parts:
+            for part in event.content.parts:
+                if part.text and not getattr(part, "thought", False):
+                    quiz_text += part.text
+
+    quiz_ms = (time.time() - t3) * 1000
+    logger.info("[QUIZ] Done in %.1fs — %d events, %d chars", quiz_ms / 1000, event_count, len(quiz_text))
+
+    quiz_text = strip_fences(quiz_text)
+    try:
+        quiz_data = json.loads(quiz_text)
+    except json.JSONDecodeError as e:
+        trace_agent_call(
+            trace, agent_name="quiz_generator", input_text=prompt[:500],
+            output_text=quiz_text[:2000], latency_ms=quiz_ms, error=f"JSON parse error: {e}",
+        )
+        raise ValueError(f"Failed to parse quiz JSON: {e}")
+
+    quizzes = validate_quizzes(quiz_data, scene_count, difficulty)
+
+    trace_agent_call(
+        trace, agent_name="quiz_generator", input_text=prompt[:500],
+        output_text=quiz_text[:5000], latency_ms=quiz_ms,
+        metadata={"scene_count": scene_count, "quiz_count": len(quizzes)},
+    )
+
+    return quizzes

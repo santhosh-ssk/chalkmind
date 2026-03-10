@@ -3,8 +3,13 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useLesson } from '../hooks/useLesson';
 import { usePlayback } from '../hooks/usePlayback';
 import { useVoiceSession } from '../hooks/useVoiceSession';
+import { useQuiz } from '../hooks/useQuiz';
+import type { ServerQuizResults } from '../hooks/useVoiceSession';
+import type { QuizQuestion } from '../types/lesson';
 import { trackEvent } from '../utils/analytics';
 import ChalkboardCanvas from '../components/board/ChalkboardCanvas';
+import QuizOverlay from '../components/quiz/QuizOverlay';
+import ScoreSlide from '../components/score/ScoreSlide';
 
 const LOADING_MESSAGES = [
   'Researching the topic...',
@@ -45,8 +50,25 @@ export default function BoardPage() {
 
   // Voice session — drives playback via setStep
   const [voiceMode, setVoiceMode] = useState<'pending' | 'active' | 'fallback' | 'complete'>('pending');
+  const [showScore, setShowScore] = useState(false);
   const voiceStartedRef = useRef(false);
 
+  // Quiz hook — needs quizzes from lesson + sendQuizAnswer from voice
+  const quizzes = lessonState.status === 'success' ? (lessonState.lesson.quizzes ?? []) : [];
+
+  // Use ref to break circular dependency: quiz needs voice.sendQuizAnswer, voice needs quiz callbacks
+  const voiceRef = useRef<{ sendQuizAnswer: (scene: number, qi: number, sel: string | null) => void } | null>(null);
+
+  const onSendAnswer = useCallback(
+    (scene: number, questionIndex: number, selected: string | null) => {
+      voiceRef.current?.sendQuizAnswer(scene, questionIndex, selected);
+    },
+    [],
+  );
+
+  const quiz = useQuiz({ quizzes, onSendAnswer });
+
+  // Voice session callbacks
   const onAdvanceStep = useCallback(
     (step: number) => {
       setStep(step);
@@ -54,11 +76,64 @@ export default function BoardPage() {
     [setStep],
   );
 
-  const onNarrationComplete = useCallback(() => {
-    setVoiceMode('complete');
-  }, []);
+  const onNarrationComplete = useCallback(
+    (quizResults?: ServerQuizResults) => {
+      setVoiceMode('complete');
+      quiz.endQuiz(quizResults);
+      if (quizResults) {
+        setShowScore(true);
+      }
+    },
+    [quiz],
+  );
 
-  const voice = useVoiceSession({ onAdvanceStep, onNarrationComplete });
+  const onStartQuiz = useCallback(
+    (scene: number, questions: QuizQuestion[]) => {
+      quiz.startSceneQuiz(scene, questions);
+    },
+    [quiz],
+  );
+
+  const onQuizQuestion = useCallback(
+    (scene: number, questionIndex: number) => {
+      quiz.setQuestionReading(scene, questionIndex);
+    },
+    [quiz],
+  );
+
+  const onQuizQuestionReady = useCallback(
+    (scene: number, questionIndex: number) => {
+      quiz.setQuestionReady(scene, questionIndex);
+    },
+    [quiz],
+  );
+
+  const onQuizResults = useCallback(
+    (scene: number, answers: { question_index: number; selected: string | null; correct: string; is_correct: boolean }[]) => {
+      quiz.showBatchReveal(scene, answers);
+    },
+    [quiz],
+  );
+
+  const onTurnComplete = useCallback(() => {
+    // Dismiss reveal overlay when agent finishes reveal narration and moves on
+    if (quiz.quizState === 'reveal') {
+      quiz.dismissReveal();
+    }
+  }, [quiz]);
+
+  const voice = useVoiceSession({
+    onAdvanceStep,
+    onNarrationComplete,
+    onStartQuiz,
+    onQuizQuestion,
+    onQuizQuestionReady,
+    onQuizResults,
+    onTurnComplete,
+  });
+
+  // Keep voiceRef in sync for quiz answer sending
+  voiceRef.current = voice;
 
   // Auto-start voice when lesson loads
   useEffect(() => {
@@ -70,10 +145,13 @@ export default function BoardPage() {
     }
   }, [lessonState.status]);
 
-  // Fall back to silent mode if voice errors
+  // Fall back to silent mode if voice errors — also dismiss any active quiz
   useEffect(() => {
     if (voice.status === 'error' && voiceMode !== 'fallback') {
       setVoiceMode('fallback');
+      if (quiz.quizState !== 'idle') {
+        quiz.dismissReveal();
+      }
     }
   }, [voice.status, voiceMode]);
 
@@ -223,6 +301,18 @@ export default function BoardPage() {
     );
   }
 
+  /* ── Score slide (post-completion) ──────────────────── */
+  if (showScore && quiz.results) {
+    return (
+      <ScoreSlide
+        results={quiz.results}
+        topic={topic}
+        learnerName={learnerName}
+        onNewTopic={() => navigate('/')}
+      />
+    );
+  }
+
   /* ── Lesson loaded ─────────────────────────────────── */
   const { lesson } = lessonState;
   const narration =
@@ -241,6 +331,9 @@ export default function BoardPage() {
     }
     sceneGroups[sceneGroups.length - 1].steps.push({ idx: i, narration: step.narration });
   }
+
+  // Check if a scene has a quiz for sidebar indicator
+  const scenesWithQuiz = new Set(quizzes.map((q) => q.scene));
 
   return (
     <div
@@ -287,6 +380,33 @@ export default function BoardPage() {
           <div style={{ fontSize: 15, fontWeight: 600, color: '#e8e4d9' }}>
             {lesson.title || topic}
           </div>
+          {/* Voice activity indicator */}
+          {voiceMode === 'active' && voice.status === 'narrating' && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '3px 10px',
+                borderRadius: 12,
+                background: '#1a2e1a',
+                border: '1px solid #5cb85c44',
+              }}
+            >
+              <div
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: '50%',
+                  background: '#5cb85c',
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                }}
+              />
+              <span style={{ fontSize: 10, color: '#5cb85c', fontWeight: 700, letterSpacing: 1 }}>
+                LIVE
+              </span>
+            </div>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span
@@ -356,9 +476,26 @@ export default function BoardPage() {
                       borderTop: group.scene > 0 ? '1px solid #2a2e2a' : 'none',
                       marginTop: group.scene > 0 ? 8 : 0,
                       letterSpacing: 0.5,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
                     }}
                   >
                     {group.title}
+                    {scenesWithQuiz.has(group.scene) && (
+                      <span
+                        style={{
+                          fontSize: 9,
+                          color: '#f5c842',
+                          background: '#3a2d1a',
+                          padding: '1px 5px',
+                          borderRadius: 4,
+                          fontWeight: 700,
+                        }}
+                      >
+                        QUIZ
+                      </span>
+                    )}
                   </div>
                 )}
                 {group.steps.map(({ idx, narration: stepNarration }) => {
@@ -396,7 +533,7 @@ export default function BoardPage() {
                           fontFamily: "'JetBrains Mono', monospace",
                         }}
                       >
-                        {isDone ? '✓' : idx + 1}
+                        {isDone ? '\u2713' : idx + 1}
                       </div>
                       <div
                         style={{
@@ -406,7 +543,7 @@ export default function BoardPage() {
                         }}
                       >
                         {stepNarration?.slice(0, 60)}
-                        {(stepNarration?.length || 0) > 60 ? '…' : ''}
+                        {(stepNarration?.length || 0) > 60 ? '\u2026' : ''}
                       </div>
                     </div>
                   );
@@ -458,7 +595,7 @@ export default function BoardPage() {
                     opacity: voiceMode === 'active' && voice.status === 'connecting' ? 0.4 : 1,
                   }}
                 >
-                  {currentStep >= totalSteps - 1 ? '⟲ Replay' : '▶ Play'}
+                  {currentStep >= totalSteps - 1 ? '\u27F2 Replay' : '\u25B6 Play'}
                 </button>
               ) : (
                 <button
@@ -476,7 +613,7 @@ export default function BoardPage() {
                     fontFamily: 'inherit',
                   }}
                 >
-                  ⏸ Pause
+                  {'\u23F8 Pause'}
                 </button>
               )}
               <button
@@ -498,14 +635,14 @@ export default function BoardPage() {
                   fontFamily: 'inherit',
                 }}
               >
-                ↺
+                {'\u21BA'}
               </button>
             </div>
           </div>
         </div>
 
         {/* Main board */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
           {/* Narration bar */}
           <div
             style={{
@@ -612,6 +749,17 @@ export default function BoardPage() {
 
           {/* Canvas */}
           <ChalkboardCanvas lesson={lesson} currentStep={currentStep} stepProgress={stepProgress} />
+
+          {/* Quiz overlay */}
+          <QuizOverlay
+            quizState={quiz.quizState}
+            currentQuestionIndex={quiz.currentQuestionIndex}
+            currentQuestions={quiz.currentQuestions}
+            timeRemaining={quiz.timeRemaining}
+            selectedOption={quiz.selectedOption}
+            sceneAnswers={quiz.sceneAnswers}
+            onSelectOption={quiz.selectOption}
+          />
         </div>
       </div>
 

@@ -15,11 +15,12 @@ import { validateForm } from '../utils/validation';
 import { trackEvent } from '../utils/analytics';
 
 const TOPIC_PILLS = [
-  'Photosynthesis',
-  'How DNS Works',
-  'Quantum Computing',
-  'Machine Learning',
-  'Black Holes',
+  'Why is the sky blue?',
+  'How do volcanoes erupt?',
+  'How does the internet work?',
+  'How does AI work?',
+  'How does the stock market work?',
+  'How does the immune system work?',
 ];
 
 const HOW_IT_WORKS = [
