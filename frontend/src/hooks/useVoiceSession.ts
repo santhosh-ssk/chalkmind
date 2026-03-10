@@ -84,7 +84,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
   );
 
   const startSession = useCallback(
-    async (lesson: Record<string, unknown>) => {
+    async (lesson: Record<string, unknown> | object) => {
       if (wsRef.current) return;
 
       setStatus('connecting');
