@@ -4,6 +4,8 @@ import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
 import Chip from '@mui/material/Chip';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import Link from '@mui/material/Link';
 
 import NameField from '../components/landing/NameField';
@@ -61,6 +63,7 @@ export default function LandingPage() {
   const [ageGroup, setAgeGroup] = useState(() => localStorage.getItem('chalkmind_ageGroup') || '18-40');
   const [difficulty, setDifficulty] = useState(() => localStorage.getItem('chalkmind_difficulty') || 'beginner');
   const [topic, setTopic] = useState('');
+  const [agreedToTerms, setAgreedToTerms] = useState(() => localStorage.getItem('chalkmind_agreedToTerms') === 'true');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const navigate = useNavigate();
   const { executeRecaptcha } = useRecaptcha();
@@ -69,9 +72,13 @@ export default function LandingPage() {
   useEffect(() => { localStorage.setItem('chalkmind_name', name); }, [name]);
   useEffect(() => { localStorage.setItem('chalkmind_ageGroup', ageGroup); }, [ageGroup]);
   useEffect(() => { localStorage.setItem('chalkmind_difficulty', difficulty); }, [difficulty]);
+  useEffect(() => { localStorage.setItem('chalkmind_agreedToTerms', String(agreedToTerms)); }, [agreedToTerms]);
 
   const handleStart = async () => {
     const formErrors = validateForm({ name, topic });
+    if (!agreedToTerms) {
+      formErrors.terms = 'You must agree to the Terms of Use';
+    }
     if (Object.keys(formErrors).length > 0) {
       setErrors(formErrors);
       return;
@@ -290,7 +297,45 @@ export default function LandingPage() {
               error={errors.topic}
             />
 
-            {/* Topic suggestion pills — below the search/button */}
+            {/* Terms agreement checkbox */}
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={agreedToTerms}
+                    onChange={(e) => setAgreedToTerms(e.target.checked)}
+                    sx={{
+                      color: 'rgba(255,255,255,0.3)',
+                      '&.Mui-checked': { color: '#2dd4bf' },
+                      p: 0.5,
+                    }}
+                    size="small"
+                  />
+                }
+                label={
+                  <Typography variant="caption" sx={{ color: '#9ca3af', fontSize: '0.8rem' }}>
+                    I agree to the{' '}
+                    <Link
+                      component={RouterLink}
+                      to="/terms"
+                      target="_blank"
+                      sx={{ color: '#2dd4bf', '&:hover': { color: '#5eead4' } }}
+                    >
+                      Terms of Use
+                    </Link>
+                    {' '}and understand content is AI-generated
+                  </Typography>
+                }
+                sx={{ mx: 0, alignItems: 'flex-start' }}
+              />
+              {errors.terms && (
+                <Typography variant="caption" sx={{ color: '#ef4444', fontSize: '0.75rem', ml: 3.5 }}>
+                  {errors.terms}
+                </Typography>
+              )}
+            </Box>
+
+            {/* Topic suggestion pills */}
             <Box
               sx={{
                 display: 'flex',
