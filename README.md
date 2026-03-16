@@ -153,14 +153,6 @@ Earn a downloadable certificate of completion after finishing the lesson.
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Key architectural decisions:**
-- **No database** — the app is stateless. Lessons are generated on-demand and streamed to the client. Session state lives in-memory for the duration of a voice session.
-- **Single WebSocket** carries both binary PCM audio frames and JSON text control messages (step advances, quiz events, transcripts).
-- **Pre-generated lessons** — all scenes, steps, and drawing commands are generated before voice narration begins, ensuring reliable sync between visuals and audio.
-- **AudioContext suspend/resume** for pause/resume — pauses audio output without destroying the WebSocket, so Gemini keeps streaming to a ring buffer and playback resumes seamlessly.
-- **Four ADK agents** — topic researcher, lesson generator, quiz generator, voice narrator — each with specialized system instructions and model configurations.
-- **Custom Drawing DSL** (9 primitive types: path, line, arrow, circle, ellipse, rect, text, annotation, brace) — Gemini outputs structured JSON commands, not raw SVG, ensuring reliable rendering and animation.
-
 ---
 
 ## Models
@@ -171,10 +163,6 @@ Earn a downloadable certificate of completion after finishing the lesson.
 | `gemini-3-flash-preview`                | Lesson generation | Generates multi-scene lesson with structured JSON output (drawing DSL commands, narration text, quiz questions). |
 | `gemini-3-flash-preview`                | Quiz generation   | Creates cumulative multiple-choice quiz questions at checkpoint scenes.                                          |
 | `gemini-2.5-flash-native-audio-preview` | Voice narration   | Native audio model for real-time voice narration via ADK bidirectional streaming. Voice: Kore.                   |
-
-The lesson generation uses a **two-step pipeline** because Gemini's web grounding (`google_search`) cannot be combined with `response_schema` in the same API call:
-1. **Research call** — grounded web search to gather topic information
-2. **Generation call** — structured JSON output with drawing commands and lesson content
 
 ---
 
@@ -375,25 +363,6 @@ Multi-stage Dockerfile:
 ```bash
 make docker-build      # Build locally
 ```
-
-### Cloud Run Configuration
-
-| Setting          | Value                                   |
-| ---------------- | --------------------------------------- |
-| Region           | `us-central1`                           |
-| Service          | `chalkmind`                             |
-| Memory           | 1Gi                                     |
-| Timeout          | 3600s (1 hour for long voice sessions)  |
-| Min instances    | 0 (scale to zero)                       |
-| Max instances    | 3                                       |
-| Session affinity | Enabled (sticky sessions for WebSocket) |
-| Authentication   | Allow unauthenticated                   |
-
-Secrets are stored in **Google Secret Manager** and injected at runtime:
-- `GOOGLE_API_KEY`
-- `RECAPTCHA_SECRET_KEY`
-- `LANGFUSE_SECRET_KEY`
-- `LANGFUSE_PUBLIC_KEY`
 
 ---
 
