@@ -4,9 +4,9 @@
 
 ChalkMind is an AI-powered learning app that turns any topic into an interactive, narrated whiteboard lesson. A user types a topic, and Gemini generates a multi-scene lesson with animated SVG drawings on a virtual chalkboard — narrated in real-time with voice via a bidirectional WebSocket connection. Each lesson includes per-scene quizzes to reinforce learning.
 
-**[Try it live](https://chalkmind-73859405427.us-central1.run.app/)**
+**<a href="https://chalkmind-73859405427.us-central1.run.app/" target="_blank">Try it live</a>**
 
-Built for the [Gemini Live Agent Challenge](https://geminiliveagentchallenge.devpost.com/) hackathon (Category: **Creative Storyteller**). Powered entirely by Google Gemini models, Google ADK, and Google Cloud.
+Built for the <a href="https://geminiliveagentchallenge.devpost.com/" target="_blank">Gemini Live Agent Challenge</a> hackathon (Category: **Creative Storyteller**). Powered entirely by Google Gemini models, Google ADK, and Google Cloud.
 
 ---
 
