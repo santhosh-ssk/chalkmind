@@ -184,7 +184,7 @@ export default function QuizOverlay({
               Quiz Time!
             </div>
             <div style={{ fontSize: 14, color: '#8fb88f', marginTop: 8 }}>
-              Listening...
+              Get ready...
             </div>
           </motion.div>
         )}
@@ -224,7 +224,7 @@ export default function QuizOverlay({
               )}
               {quizState === 'reading' && (
                 <span style={{ fontSize: 12, color: '#f5c842', fontStyle: 'italic' }}>
-                  Listening...
+                  Reading question...
                 </span>
               )}
             </div>

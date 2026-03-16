@@ -11,12 +11,14 @@ import ChalkboardCanvas from '../components/board/ChalkboardCanvas';
 import QuizOverlay from '../components/quiz/QuizOverlay';
 import ScoreSlide from '../components/score/ScoreSlide';
 
-const LOADING_MESSAGES = [
-  'Researching the topic...',
-  'Designing the whiteboard...',
-  'Adding visual details...',
-  'Sketching diagrams...',
-  'Writing narration...',
+const LOADING_STAGES = [
+  { msg: 'Researching the topic...', icon: '🔍', pct: 10 },
+  { msg: 'Reading through sources...', icon: '📚', pct: 25 },
+  { msg: 'Designing the whiteboard...', icon: '🎨', pct: 40 },
+  { msg: 'Sketching diagrams...', icon: '✏️', pct: 55 },
+  { msg: 'Adding visual details...', icon: '✨', pct: 70 },
+  { msg: 'Writing narration...', icon: '🎙️', pct: 85 },
+  { msg: 'Almost there... grab a coffee ☕', icon: '☕', pct: 95 },
 ];
 
 export default function BoardPage() {
@@ -173,18 +175,24 @@ export default function BoardPage() {
     }
   }, [currentStep, isPlaying, totalSteps, topic]);
 
-  // Rotating loading messages
+  // Rotating loading messages + elapsed timer
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     if (lessonState.status !== 'loading') return;
-    const interval = setInterval(() => {
-      setLoadingMsgIdx((i) => (i + 1) % LOADING_MESSAGES.length);
-    }, 3000);
-    return () => clearInterval(interval);
+    const msgInterval = setInterval(() => {
+      setLoadingMsgIdx((i) => Math.min(i + 1, LOADING_STAGES.length - 1));
+    }, 5000);
+    const tickInterval = setInterval(() => {
+      setElapsed((e) => e + 1);
+    }, 1000);
+    return () => { clearInterval(msgInterval); clearInterval(tickInterval); };
   }, [lessonState.status]);
 
   /* ── Loading state ─────────────────────────────────── */
   if (lessonState.status === 'loading') {
+    const stage = LOADING_STAGES[loadingMsgIdx];
+    const progressPct = Math.min(100, Math.round((elapsed / 45) * 100));
     return (
       <div
         style={{
@@ -193,58 +201,148 @@ export default function BoardPage() {
           alignItems: 'center',
           justifyContent: 'center',
           minHeight: '100vh',
-          gap: 20,
+          gap: 12,
           background: '#111613',
           color: '#d4d0c8',
           fontFamily: "'Lexend', sans-serif",
+          padding: '0 24px',
         }}
       >
-        <div style={{ position: 'relative', width: 60, height: 60 }}>
-          <div
-            style={{
-              width: 60,
-              height: 60,
-              borderRadius: '50%',
-              border: '3px solid #2a3a2a',
-              borderTopColor: '#5cb85c',
-              animation: 'spin 1s linear infinite',
-            }}
-          />
-        </div>
+        {/* Animated chalkboard SVG graphic */}
+        <svg width="140" height="120" viewBox="0 0 140 120" style={{ marginBottom: 8 }}>
+          {/* Board */}
+          <rect x="10" y="10" width="120" height="90" rx="6" fill="#1a201a" stroke="#5a4a32" strokeWidth="3"/>
+          <rect x="18" y="18" width="104" height="74" rx="3" fill="#223322"/>
+          {/* Animated chalk lines */}
+          <line x1="30" y1="40" x2="80" y2="40" stroke="#e8e4d9" strokeWidth="2" strokeLinecap="round"
+            strokeDasharray="50" strokeDashoffset="50" style={{ animation: 'chalkDraw1 2s ease forwards' }}/>
+          <line x1="30" y1="55" x2="100" y2="55" stroke="#5cb85c" strokeWidth="2" strokeLinecap="round"
+            strokeDasharray="70" strokeDashoffset="70" style={{ animation: 'chalkDraw2 2s 0.8s ease forwards' }}/>
+          <line x1="30" y1="70" x2="65" y2="70" stroke="#f5c842" strokeWidth="2" strokeLinecap="round"
+            strokeDasharray="35" strokeDashoffset="35" style={{ animation: 'chalkDraw3 2s 1.6s ease forwards' }}/>
+          {/* Chalk piece */}
+          <rect x="95" y="96" width="18" height="8" rx="2" fill="#e8e4d9" opacity="0.7"
+            style={{ animation: 'chalkBob 2s ease-in-out infinite' }}/>
+        </svg>
+
+        {/* Main heading */}
         <div
           style={{
-            fontSize: 16,
-            color: '#8fb88f',
+            fontSize: 28,
+            fontWeight: 700,
+            color: '#e8e4d9',
             fontFamily: "'Caveat', cursive",
-            fontWeight: 600,
+            textAlign: 'center',
           }}
         >
-          Creating your lesson, {learnerName}...
+          Preparing your lesson, {learnerName}
         </div>
-        <div style={{ fontSize: 14, color: '#e8e4d9' }}>"{topic}"</div>
-        <div style={{ fontSize: 13, color: '#4a5a4a', minHeight: 20 }}>{LOADING_MESSAGES[loadingMsgIdx]}</div>
+
+        {/* Topic */}
+        <div style={{ fontSize: 18, color: '#8fb88f', textAlign: 'center' }}>
+          "{topic}"
+        </div>
+
+        {/* Progress bar */}
+        <div style={{
+          width: '100%',
+          maxWidth: 320,
+          height: 6,
+          background: '#2a3a2a',
+          borderRadius: 3,
+          marginTop: 12,
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            height: '100%',
+            width: `${progressPct}%`,
+            background: 'linear-gradient(90deg, #5cb85c, #f5c842)',
+            borderRadius: 3,
+            transition: 'width 1s ease',
+          }}/>
+        </div>
+
+        {/* Stage message */}
+        <div style={{
+          fontSize: 18,
+          color: '#8fb88f',
+          fontFamily: "'Caveat', cursive",
+          fontWeight: 600,
+          minHeight: 28,
+          textAlign: 'center',
+          transition: 'opacity 0.3s',
+        }}>
+          {stage.icon} {stage.msg}
+        </div>
+
+        {/* Time estimate + elapsed */}
+        <div style={{ fontSize: 14, color: '#4a5a4a', textAlign: 'center', lineHeight: 1.6 }}>
+          This usually takes about 45 seconds
+          <br/>
+          <span style={{ fontSize: 13, color: '#3a4a3a' }}>
+            {elapsed}s elapsed
+          </span>
+        </div>
+
+        {/* Fun tip */}
+        <div style={{
+          marginTop: 8,
+          padding: '10px 20px',
+          background: '#1a231a',
+          borderRadius: 12,
+          border: '1px solid #2a3a2a',
+          fontSize: 14,
+          color: '#706b60',
+          fontStyle: 'italic',
+          textAlign: 'center',
+          maxWidth: 340,
+        }}>
+          {elapsed < 15
+            ? 'Our AI is reading up on this topic just for you...'
+            : elapsed < 30
+            ? 'Good things take time — stretch your fingers!'
+            : elapsed < 45
+            ? 'Almost there... perfect time to grab a coffee'
+            : "Putting on the finishing touches... hang tight!"}
+        </div>
+
         <button
           onClick={() => navigate('/')}
           style={{
-            marginTop: 12,
-            padding: '8px 18px',
+            marginTop: 16,
+            padding: '10px 22px',
             borderRadius: 8,
             background: 'transparent',
             border: '1px solid #2a3a2a',
             color: '#706b60',
             cursor: 'pointer',
-            fontSize: 13,
+            fontSize: 14,
             fontFamily: 'inherit',
           }}
         >
-          ← Go back
+          &larr; Go back
         </button>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+        <style>{`
+          @keyframes chalkDraw1 {
+            to { stroke-dashoffset: 0; }
+          }
+          @keyframes chalkDraw2 {
+            to { stroke-dashoffset: 0; }
+          }
+          @keyframes chalkDraw3 {
+            to { stroke-dashoffset: 0; }
+          }
+          @keyframes chalkBob {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+          }
+        `}</style>
       </div>
     );
   }
 
-  /* ── Error state ───────────────────────────────────── */
+  /* ── Error state — redirect home (reCAPTCHA token is stale on refresh) ── */
   if (lessonState.status === 'error') {
     return (
       <div
@@ -261,42 +359,29 @@ export default function BoardPage() {
         }}
       >
         <div style={{ fontSize: 40 }}>⚠</div>
-        <div style={{ fontSize: 16, color: '#e07050', maxWidth: 480, textAlign: 'center' }}>
+        <div style={{ fontSize: 18, color: '#e07050', maxWidth: 480, textAlign: 'center' }}>
+          Something went wrong
+        </div>
+        <div style={{ fontSize: 14, color: '#706b60', maxWidth: 400, textAlign: 'center' }}>
           {lessonState.message}
         </div>
-        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-          <button
-            onClick={lessonState.retry}
-            style={{
-              padding: '10px 22px',
-              borderRadius: 8,
-              background: '#2d5a3d',
-              border: 'none',
-              color: '#e8e4d9',
-              cursor: 'pointer',
-              fontSize: 14,
-              fontWeight: 600,
-              fontFamily: 'inherit',
-            }}
-          >
-            Retry
-          </button>
-          <button
-            onClick={() => navigate('/')}
-            style={{
-              padding: '10px 22px',
-              borderRadius: 8,
-              background: 'transparent',
-              border: '1px solid #2a3a2a',
-              color: '#706b60',
-              cursor: 'pointer',
-              fontSize: 14,
-              fontFamily: 'inherit',
-            }}
-          >
-            ← Go back
-          </button>
-        </div>
+        <button
+          onClick={() => navigate('/')}
+          style={{
+            marginTop: 8,
+            padding: '12px 28px',
+            borderRadius: 8,
+            background: '#2d5a3d',
+            border: 'none',
+            color: '#e8e4d9',
+            cursor: 'pointer',
+            fontSize: 15,
+            fontWeight: 600,
+            fontFamily: 'inherit',
+          }}
+        >
+          ← Try again from homepage
+        </button>
       </div>
     );
   }
