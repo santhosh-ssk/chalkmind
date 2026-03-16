@@ -150,7 +150,7 @@ export default function LandingPage() {
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+            gridTemplateColumns: { xs: '1fr', md: '9fr 11fr' },
             gap: { xs: 4, md: 6 },
             alignItems: 'center',
             py: { xs: 4, md: 6 },
@@ -246,6 +246,23 @@ export default function LandingPage() {
               ChalkMind turns complex topics into simple visual explanations — drawn step by step on
               a virtual chalkboard, narrated by AI in real-time.
             </Typography>
+            <Box
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 1,
+                bgcolor: 'rgba(255,255,255,0.05)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '9999px',
+                px: 2,
+                py: 0.75,
+              }}
+            >
+              <Typography variant="caption" sx={{ fontWeight: 500, color: '#d1d5db' }}>
+                Built for Gemini Agent Hackathon 2026
+              </Typography>
+            </Box>
           </Box>
 
           {/* Right column — form */}

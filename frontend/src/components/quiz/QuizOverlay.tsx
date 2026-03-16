@@ -160,9 +160,12 @@ export default function QuizOverlay({
           inset: 0,
           background: 'rgba(17, 22, 19, 0.92)',
           display: 'flex',
-          alignItems: 'center',
+          alignItems: quizState === 'reveal' ? 'flex-start' : 'center',
           justifyContent: 'center',
           zIndex: 50,
+          overflowY: quizState === 'reveal' ? 'auto' : 'hidden',
+          paddingTop: quizState === 'reveal' ? 24 : 0,
+          paddingBottom: quizState === 'reveal' ? 24 : 0,
         }}
       >
         {/* Intro state */}

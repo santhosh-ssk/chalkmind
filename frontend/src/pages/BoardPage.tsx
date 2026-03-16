@@ -54,6 +54,7 @@ export default function BoardPage() {
   const [voiceMode, setVoiceMode] = useState<'pending' | 'active' | 'fallback' | 'complete'>('pending');
   const [showScore, setShowScore] = useState(false);
   const voiceStartedRef = useRef(false);
+  const activeStepRef = useRef<HTMLDivElement>(null);
 
   // Quiz hook — needs quizzes from lesson + sendQuizAnswer from voice
   const quizzes = lessonState.status === 'success' ? (lessonState.lesson.quizzes ?? []) : [];
@@ -174,6 +175,11 @@ export default function BoardPage() {
       trackEvent('lesson_completed', { topic, step_count: totalSteps });
     }
   }, [currentStep, isPlaying, totalSteps, topic]);
+
+  // Auto-scroll sidebar to keep active step visible
+  useEffect(() => {
+    activeStepRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [currentStep]);
 
   // Rotating loading messages + elapsed timer
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
@@ -504,24 +510,29 @@ export default function BoardPage() {
           >
             Speed
           </span>
-          {[0.5, 1, 1.5, 2].map((s) => (
-            <button
-              key={s}
-              onClick={() => setSpeed(s)}
-              style={{
-                padding: '3px 8px',
-                borderRadius: 4,
-                fontSize: 11,
-                background: speed === s ? '#2d5a3d' : 'transparent',
-                border: `1px solid ${speed === s ? '#2d5a3d' : '#2a2e2a'}`,
-                color: speed === s ? '#7ee08a' : '#706b60',
-                cursor: 'pointer',
-                fontFamily: "'JetBrains Mono', monospace",
-              }}
-            >
-              {s}x
-            </button>
-          ))}
+          {[0.5, 1, 1.5, 2].map((s) => {
+            const isVoiceNarrating = voiceMode === 'active' && voice.status === 'narrating';
+            return (
+              <button
+                key={s}
+                onClick={() => !isVoiceNarrating && setSpeed(s)}
+                disabled={isVoiceNarrating}
+                style={{
+                  padding: '3px 8px',
+                  borderRadius: 4,
+                  fontSize: 11,
+                  background: speed === s ? '#2d5a3d' : 'transparent',
+                  border: `1px solid ${speed === s ? '#2d5a3d' : '#2a2e2a'}`,
+                  color: speed === s ? '#7ee08a' : '#706b60',
+                  cursor: isVoiceNarrating ? 'not-allowed' : 'pointer',
+                  opacity: isVoiceNarrating ? 0.35 : 1,
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              >
+                {s}x
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -586,20 +597,23 @@ export default function BoardPage() {
                 {group.steps.map(({ idx, narration: stepNarration }) => {
                   const isActive = idx === currentStep;
                   const isDone = idx < currentStep;
+                  const isVoiceNarrating = voiceMode === 'active' && voice.status === 'narrating';
                   return (
                     <div
                       key={idx}
-                      onClick={() => jumpTo(idx)}
+                      ref={isActive ? activeStepRef : undefined}
+                      onClick={() => !isVoiceNarrating && jumpTo(idx)}
                       style={{
                         display: 'flex',
                         gap: 10,
                         marginBottom: 4,
-                        cursor: 'pointer',
+                        cursor: isVoiceNarrating ? 'not-allowed' : 'pointer',
                         padding: '8px 10px',
                         borderRadius: 8,
                         background: isActive ? '#1a2e1e' : 'transparent',
                         border: `1px solid ${isActive ? '#2d5a3d44' : 'transparent'}`,
                         transition: 'all 0.15s',
+                        opacity: isVoiceNarrating && !isActive ? 0.5 : 1,
                       }}
                     >
                       <div
@@ -644,8 +658,12 @@ export default function BoardPage() {
                 <button
                   onClick={() => {
                     voice.stopSession();
-                    setVoiceMode('fallback');
+                    voiceStartedRef.current = false;
                     reset();
+                    setVoiceMode('pending');
+                    voice.startSession(lesson).then(() => {
+                      setVoiceMode('active');
+                    });
                   }}
                   style={{
                     flex: 1,
@@ -660,11 +678,24 @@ export default function BoardPage() {
                     fontFamily: 'inherit',
                   }}
                 >
-                  Stop Voice
+                  Restart Course
                 </button>
               ) : !isPlaying ? (
                 <button
-                  onClick={play}
+                  onClick={() => {
+                    if (voiceMode === 'complete') {
+                      // Lesson finished — restart voice from beginning
+                      reset();
+                      voice.stopSession();
+                      voiceStartedRef.current = false;
+                      setVoiceMode('pending');
+                      voice.startSession(lesson).then(() => {
+                        setVoiceMode('active');
+                      });
+                    } else {
+                      play();
+                    }
+                  }}
                   disabled={voiceMode === 'active' && voice.status === 'connecting'}
                   style={{
                     flex: 1,
@@ -732,6 +763,8 @@ export default function BoardPage() {
           <div
             style={{
               minHeight: 58,
+              maxHeight: 120,
+              overflowY: 'auto',
               padding: '12px 22px',
               background: '#141a15',
               borderBottom: '1px solid #2a2e2a',
