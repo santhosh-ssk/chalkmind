@@ -4,26 +4,28 @@
 
 ChalkMind is an AI-powered learning app that turns any topic into an interactive, narrated whiteboard lesson. A user types a topic, and Gemini generates a multi-scene lesson with animated SVG drawings on a virtual chalkboard — narrated in real-time with voice via a bidirectional WebSocket connection. Each lesson includes per-scene quizzes to reinforce learning.
 
+**[Try it live](https://chalkmind-73859405427.us-central1.run.app/)**
+
 Built for the [Gemini Live Agent Challenge](https://geminiliveagentchallenge.devpost.com/) hackathon (Category: **Creative Storyteller**). Powered entirely by Google Gemini models, Google ADK, and Google Cloud.
 
 ---
 
 ## Built with Google Cloud & AI
 
-| Technology | Usage |
-|---|---|
-| **Google GenAI SDK** | Gemini API calls, structured output, content types |
-| **Google ADK** | Agent framework — research, lesson, quiz, and voice narration agents with bidirectional live streaming |
-| **Gemini 3.1 Flash Lite** | Topic research with web grounding |
-| **Gemini 3 Flash** | Lesson generation (structured JSON drawing DSL) + quiz generation |
-| **Gemini 2.5 Flash Native Audio** | Real-time voice narration via `Runner.run_live()` |
-| **Google Search (web grounding)** | Real-time web research before lesson generation |
-| **Google Cloud Run** | Serverless deployment with WebSocket support |
-| **Google Artifact Registry** | Docker image storage |
-| **Google Secret Manager** | Runtime secrets injection |
-| **Google Cloud Build** | CI/CD deployment |
-| **Workload Identity Federation** | Keyless GitHub → GCP authentication |
-| **reCAPTCHA v3** | Bot protection |
+| Technology                        | Usage                                                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Google GenAI SDK**              | Gemini API calls, structured output, content types                                                     |
+| **Google ADK**                    | Agent framework — research, lesson, quiz, and voice narration agents with bidirectional live streaming |
+| **Gemini 3.1 Flash Lite**         | Topic research with web grounding                                                                      |
+| **Gemini 3 Flash**                | Lesson generation (structured JSON drawing DSL) + quiz generation                                      |
+| **Gemini 2.5 Flash Native Audio** | Real-time voice narration via `Runner.run_live()`                                                      |
+| **Google Search (web grounding)** | Real-time web research before lesson generation                                                        |
+| **Google Cloud Run**              | Serverless deployment with WebSocket support                                                           |
+| **Google Artifact Registry**      | Docker image storage                                                                                   |
+| **Google Secret Manager**         | Runtime secrets injection                                                                              |
+| **Google Cloud Build**            | CI/CD deployment                                                                                       |
+| **Workload Identity Federation**  | Keyless GitHub → GCP authentication                                                                    |
+| **reCAPTCHA v3**                  | Bot protection                                                                                         |
 
 ---
 
@@ -81,17 +83,18 @@ Earn a downloadable certificate of completion after finishing the lesson.
 ### Technical Pipeline
 
 ```
-  ┌──────────────┐     ┌──────────────────┐     ┌──────────────┐     ┌──────────────────┐
-  │  1. RESEARCH  │     │  2. LESSON GEN   │     │  3. QUIZ GEN │     │  4. VOICE         │
-  │              │     │                  │     │              │     │   NARRATION       │
-  │ Gemini 3.1   │────▶│ Gemini 3 Flash   │────▶│ Gemini 3     │────▶│ Gemini 2.5 Flash  │
-  │ Flash Lite   │     │                  │     │ Flash        │     │ Native Audio      │
-  │              │     │ Structured JSON: │     │              │     │                   │
-  │ + Google     │     │ scenes, steps,   │     │ Multiple-    │     │ ADK Runner        │
-  │   Search     │     │ drawing DSL,     │     │ choice Qs    │     │ .run_live()       │
-  │   (grounding)│     │ narration text   │     │ per scene    │     │ bidi WebSocket    │
-  └──────────────┘     └──────────────────┘     └──────────────┘     └──────────────────┘
-        HTTP                   HTTP                   HTTP              WebSocket (live)
+┌────────────────┐    ┌────────────────┐    ┌────────────────┐    ┌────────────────┐
+│  1. RESEARCH   │    │ 2. LESSON GEN  │    │  3. QUIZ GEN   │    │   4. VOICE     │
+│                │    │                │    │                │    │   NARRATION    │
+│ Gemini 3.1     │───▶│ Gemini 3 Flash │───▶│ Gemini 3 Flash │───▶│ Gemini 2.5     │
+│ Flash Lite     │    │                │    │                │    │ Flash Native   │
+│                │    │ Structured     │    │ Multiple-      │    │ Audio          │
+│ + Google       │    │ JSON: scenes,  │    │ choice Qs      │    │                │
+│   Search       │    │ steps, drawing │    │ per scene      │    │ ADK Runner     │
+│   (grounding)  │    │ DSL, narration │    │                │    │ .run_live()    │
+│                │    │                │    │                │    │ bidi WebSocket │
+└────────────────┘    └────────────────┘    └────────────────┘    └────────────────┘
+      HTTP                  HTTP                  HTTP             WebSocket (live)
 ```
 
 ---
@@ -99,55 +102,55 @@ Earn a downloadable certificate of completion after finishing the lesson.
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         USER (Browser)                              │
-│                                                                     │
-│   React + Vite + TypeScript Frontend                                │
-│   ┌───────────────┐  ┌──────────────────┐  ┌────────────────────┐  │
-│   │ Landing Page   │  │ Chalkboard Canvas│  │ Audio Worklets     │  │
-│   │ (topic form)   │  │ (Framer Motion   │  │ ┌────────────────┐ │  │
-│   │                │  │  SVG animation)  │  │ │ Capture 16kHz  │ │  │
-│   │                │  │                  │  │ │ Playback 24kHz │ │  │
-│   └───────────────┘  └──────────────────┘  │ └────────────────┘ │  │
-│                                             └────────────────────┘  │
-└──────────┬──────────────────────┬───────────────────────────────────┘
-           │ POST /api/           │ WS /ws/voice/{id}
-           │ generate-lesson      │ (binary PCM audio
-           │ (JSON)               │  + JSON control msgs)
-           ▼                      ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    FastAPI Backend (Cloud Run)                       │
-│                                                                     │
-│   ┌──────────────────────┐    ┌──────────────────────────────────┐  │
-│   │ Lesson Generator     │    │ Voice Session (ADK Live API)     │  │
-│   │                      │    │                                  │  │
-│   │  Step 1: Research    │    │  LiveRequestQueue                │  │
-│   │  (web grounding)     │    │       │                          │  │
-│   │         │            │    │       ▼                          │  │
-│   │  Step 2: Generate    │    │  Runner ──► Narration Agent      │  │
-│   │  (structured JSON)   │    │              │                   │  │
-│   │         │            │    │  Voice Session State Machine     │  │
-│   │  Step 3: Quiz Gen    │    │  (step tracking, quiz flow)      │  │
-│   └──────────┬───────────┘    └──────────────┬───────────────────┘  │
-│              │                               │                      │
-│   Security: reCAPTCHA, profanity filter,     │                      │
-│   rate limiting, input sanitization          │                      │
-└──────────────┼───────────────────────────────┼──────────────────────┘
-               │                               │
-               ▼                               ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      Google Gemini APIs                              │
-│                                                                     │
-│   ┌─────────────────────┐  ┌─────────────────────────────────────┐  │
-│   │ gemini-3.1-flash-   │  │ gemini-2.5-flash-native-audio-     │  │
-│   │ lite-preview        │  │ preview (native audio model)        │  │
-│   │ (research + search) │  │                                     │  │
-│   ├─────────────────────┤  │ Real-time voice narration via       │  │
-│   │ gemini-3-flash-     │  │ ADK bidirectional streaming         │  │
-│   │ preview             │  │ Voice: Kore                         │  │
-│   │ (lesson + quiz gen) │  │ Session limit: 15 min               │  │
-│   └─────────────────────┘  └─────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                            USER (Browser)                               │
+│                                                                         │
+│   React + Vite + TypeScript Frontend                                    │
+│   ┌───────────-──────┐  ┌────────────────────┐  ┌────────────────────┐  │
+│   │ Landing Page     │  │ Chalkboard Canvas  │  │ Audio Worklets     │  │
+│   │ (topic form)     │  │ (Framer Motion     │  │ ┌────────────────┐ │  │
+│   │                  │  │  SVG animation)    │  │ │ Capture 16kHz  │ │  │
+│   │                  │  │                    │  │ │ Playback 24kHz │ │  │
+│   └────────────-─────┘  └────────────────────┘  │ └────────────────┘ │  │
+│                                                 └────────────────────┘  │
+└──────────┬────────────────────────┬─────────────────────────────────────┘
+           │ POST /api/             │ WS /ws/voice/{id}
+           │ generate-lesson        │ (binary PCM audio
+           │ (JSON)                 │  + JSON control msgs)
+           ▼                        ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      FastAPI Backend (Cloud Run)                        │
+│                                                                         │
+│   ┌────────────────────────┐    ┌────────────────────────────────────┐  │
+│   │ Lesson Generator       │    │ Voice Session (ADK Live API)       │  │
+│   │                        │    │                                    │  │
+│   │  Step 1: Research      │    │  LiveRequestQueue                  │  │
+│   │  (web grounding)       │    │       │                            │  │
+│   │         │              │    │       ▼                            │  │
+│   │  Step 2: Generate      │    │  Runner ──► Narration Agent        │  │
+│   │  (structured JSON)     │    │              │                     │  │
+│   │         │              │    │  Voice Session State Machine       │  │
+│   │  Step 3: Quiz Gen      │    │  (step tracking, quiz flow)        │  │
+│   └────────────┬───────────┘    └────────────────┬───────────────────┘  │
+│                │                                 │                      │
+│   Security: reCAPTCHA, profanity filter,         │                      │
+│   rate limiting, input sanitization              │                      │
+└────────────────┼─────────────────────────────────┼──────────────────────┘
+                 │                                 │
+                 ▼                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        Google Gemini APIs                               │
+│                                                                         │
+│   ┌───────────────────────┐  ┌───────────────────────────────────────┐  │
+│   │ gemini-3.1-flash-     │  │ gemini-2.5-flash-native-audio-        │  │
+│   │ lite-preview          │  │ preview (native audio model)          │  │
+│   │ (research + search)   │  │                                       │  │
+│   ├───────────────────────┤  │ Real-time voice narration via         │  │
+│   │ gemini-3-flash-       │  │ ADK bidirectional streaming           │  │
+│   │ preview               │  │ Voice: Kore                           │  │
+│   │ (lesson + quiz gen)   │  │ Session limit: 15 min                 │  │
+│   └───────────────────────┘  └───────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key architectural decisions:**
@@ -162,12 +165,12 @@ Earn a downloadable certificate of completion after finishing the lesson.
 
 ## Models
 
-| Model | Purpose | Details |
-|-------|---------|---------|
-| `gemini-3.1-flash-lite-preview` | Topic research | Web grounding via `google_search` tool. Gathers current information about the requested topic. |
-| `gemini-3-flash-preview` | Lesson generation | Generates multi-scene lesson with structured JSON output (drawing DSL commands, narration text, quiz questions). |
-| `gemini-3-flash-preview` | Quiz generation | Creates cumulative multiple-choice quiz questions at checkpoint scenes. |
-| `gemini-2.5-flash-native-audio-preview` | Voice narration | Native audio model for real-time voice narration via ADK bidirectional streaming. Voice: Kore. |
+| Model                                   | Purpose           | Details                                                                                                          |
+| --------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `gemini-3.1-flash-lite-preview`         | Topic research    | Web grounding via `google_search` tool. Gathers current information about the requested topic.                   |
+| `gemini-3-flash-preview`                | Lesson generation | Generates multi-scene lesson with structured JSON output (drawing DSL commands, narration text, quiz questions). |
+| `gemini-3-flash-preview`                | Quiz generation   | Creates cumulative multiple-choice quiz questions at checkpoint scenes.                                          |
+| `gemini-2.5-flash-native-audio-preview` | Voice narration   | Native audio model for real-time voice narration via ADK bidirectional streaming. Voice: Kore.                   |
 
 The lesson generation uses a **two-step pipeline** because Gemini's web grounding (`google_search`) cannot be combined with `response_schema` in the same API call:
 1. **Research call** — grounded web search to gather topic information
@@ -282,27 +285,27 @@ cd frontend && npx tsc --noEmit
 ## Tech Stack
 
 ### Backend
-| Package | Version | Purpose |
-|---------|---------|---------|
-| FastAPI | >=0.115.0 | HTTP + WebSocket server |
-| Uvicorn | >=0.34.0 | ASGI server |
-| Google ADK | >=1.2.0 | Agent framework, Runner, LiveRequestQueue |
-| Google GenAI | >=1.0.0 | Gemini SDK, types, structured output |
-| Pydantic | >=2.0.0 | Data validation, request/response schemas |
-| SlowAPI | >=0.1.9 | Rate limiting |
-| better-profanity | >=0.7.0 | Input content filtering |
-| Langfuse | >=3.0.0 | AI agent tracing & observability |
+| Package          | Version   | Purpose                                   |
+| ---------------- | --------- | ----------------------------------------- |
+| FastAPI          | >=0.115.0 | HTTP + WebSocket server                   |
+| Uvicorn          | >=0.34.0  | ASGI server                               |
+| Google ADK       | >=1.2.0   | Agent framework, Runner, LiveRequestQueue |
+| Google GenAI     | >=1.0.0   | Gemini SDK, types, structured output      |
+| Pydantic         | >=2.0.0   | Data validation, request/response schemas |
+| SlowAPI          | >=0.1.9   | Rate limiting                             |
+| better-profanity | >=0.7.0   | Input content filtering                   |
+| Langfuse         | >=3.0.0   | AI agent tracing & observability          |
 
 ### Frontend
-| Package | Version | Purpose |
-|---------|---------|---------|
-| React | 19.x | UI framework |
-| Vite | 7.x | Build tool & dev server |
-| TypeScript | 5.x | Type safety |
-| Framer Motion | 12.x | SVG draw-on animation, transitions |
-| MUI (Material-UI) | 7.x | UI components, theming |
-| React Router | 7.x | Client-side routing |
-| Sass | 1.x | Styling |
+| Package           | Version | Purpose                            |
+| ----------------- | ------- | ---------------------------------- |
+| React             | 19.x    | UI framework                       |
+| Vite              | 7.x     | Build tool & dev server            |
+| TypeScript        | 5.x     | Type safety                        |
+| Framer Motion     | 12.x    | SVG draw-on animation, transitions |
+| MUI (Material-UI) | 7.x     | UI components, theming             |
+| React Router      | 7.x     | Client-side routing                |
+| Sass              | 1.x     | Styling                            |
 
 ### Audio Pipeline
 - **Capture:** `AudioContext({ sampleRate: 16000 })` + AudioWorklet → Int16 PCM
@@ -324,7 +327,7 @@ Push to main
     ▼
 ┌─────────────────────────────────┐
 │ 1. Checkout code                │
-│ 2. Authenticate to GCP         │
+│ 2. Authenticate to GCP          │
 │    (Workload Identity           │
 │     Federation — no keys)       │
 │ 3. Login to Artifact Registry   │
@@ -338,22 +341,22 @@ Push to main
 **Authentication:** Uses [Workload Identity Federation (WIF)](https://cloud.google.com/iam/docs/workload-identity-federation) — no service account keys stored in GitHub. The GitHub OIDC token is exchanged for GCP credentials at deploy time.
 
 **Required GitHub Secrets:**
-| Secret | Description |
-|--------|-------------|
-| `WIF_PROVIDER` | Workload Identity Provider resource name |
-| `WIF_SERVICE_ACCOUNT` | GCP service account email |
-| `GCP_PROJECT_ID` | Google Cloud project ID |
+| Secret                | Description                              |
+| --------------------- | ---------------------------------------- |
+| `WIF_PROVIDER`        | Workload Identity Provider resource name |
+| `WIF_SERVICE_ACCOUNT` | GCP service account email                |
+| `GCP_PROJECT_ID`      | Google Cloud project ID                  |
 
 **Required GitHub Variables:**
-| Variable | Description |
-|----------|-------------|
-| `VITE_GA_MEASUREMENT_ID` | Google Analytics 4 measurement ID |
-| `VITE_RECAPTCHA_SITE_KEY` | reCAPTCHA v2 site key |
-| `VITE_QUIZ_TIMER_SECONDS` | Quiz timer duration |
-| `RECAPTCHA_ENABLED` | Enable reCAPTCHA (`true`/`false`) |
-| `LANGFUSE_BASE_URL` | Langfuse tracing endpoint |
-| `RATE_LIMIT` | API rate limit (e.g., `1/30seconds`) |
-| `QUIZ_TIMER_SECONDS` | Backend quiz timer |
+| Variable                  | Description                          |
+| ------------------------- | ------------------------------------ |
+| `VITE_GA_MEASUREMENT_ID`  | Google Analytics 4 measurement ID    |
+| `VITE_RECAPTCHA_SITE_KEY` | reCAPTCHA v2 site key                |
+| `VITE_QUIZ_TIMER_SECONDS` | Quiz timer duration                  |
+| `RECAPTCHA_ENABLED`       | Enable reCAPTCHA (`true`/`false`)    |
+| `LANGFUSE_BASE_URL`       | Langfuse tracing endpoint            |
+| `RATE_LIMIT`              | API rate limit (e.g., `1/30seconds`) |
+| `QUIZ_TIMER_SECONDS`      | Backend quiz timer                   |
 
 ### Cloud Build (`cloudbuild.yaml`)
 
@@ -375,16 +378,16 @@ make docker-build      # Build locally
 
 ### Cloud Run Configuration
 
-| Setting | Value |
-|---------|-------|
-| Region | `us-central1` |
-| Service | `chalkmind` |
-| Memory | 1Gi |
-| Timeout | 3600s (1 hour for long voice sessions) |
-| Min instances | 0 (scale to zero) |
-| Max instances | 3 |
+| Setting          | Value                                   |
+| ---------------- | --------------------------------------- |
+| Region           | `us-central1`                           |
+| Service          | `chalkmind`                             |
+| Memory           | 1Gi                                     |
+| Timeout          | 3600s (1 hour for long voice sessions)  |
+| Min instances    | 0 (scale to zero)                       |
+| Max instances    | 3                                       |
 | Session affinity | Enabled (sticky sessions for WebSocket) |
-| Authentication | Allow unauthenticated |
+| Authentication   | Allow unauthenticated                   |
 
 Secrets are stored in **Google Secret Manager** and injected at runtime:
 - `GOOGLE_API_KEY`
@@ -442,16 +445,16 @@ app/
 
 ## Make Commands
 
-| Command | Description |
-|---------|-------------|
-| `make install` | Install all dependencies (npm + pip) |
-| `make dev` | Run frontend + backend concurrently |
-| `make dev-frontend` | Vite dev server only (port 5173) |
-| `make dev-backend` | Uvicorn with hot-reload only (port 8000) |
-| `make build` | Production frontend build |
-| `make docker-build` | Build Docker image locally |
-| `make deploy` | Deploy via Cloud Build |
-| `make clean` | Remove build artifacts |
+| Command             | Description                              |
+| ------------------- | ---------------------------------------- |
+| `make install`      | Install all dependencies (npm + pip)     |
+| `make dev`          | Run frontend + backend concurrently      |
+| `make dev-frontend` | Vite dev server only (port 5173)         |
+| `make dev-backend`  | Uvicorn with hot-reload only (port 8000) |
+| `make build`        | Production frontend build                |
+| `make docker-build` | Build Docker image locally               |
+| `make deploy`       | Deploy via Cloud Build                   |
+| `make clean`        | Remove build artifacts                   |
 
 ---
 
