@@ -47,7 +47,7 @@ export default function BoardPage() {
     recaptchaToken,
   });
   const totalSteps = lessonState.status === 'success' ? lessonState.lesson.steps.length : 0;
-  const { currentStep, stepProgress, isPlaying, speed, play, pause, resume, reset, jumpTo, setStep, setSpeed } =
+  const { currentStep, stepProgress, isPlaying, speed, pause, resume, reset, jumpTo, setStep, setSpeed } =
     usePlayback(totalSteps);
 
   // Voice session — drives playback via setStep
