@@ -47,14 +47,16 @@ export default function BoardPage() {
     recaptchaToken,
   });
   const totalSteps = lessonState.status === 'success' ? lessonState.lesson.steps.length : 0;
-  const { currentStep, stepProgress, isPlaying, speed, play, pause, reset, jumpTo, setStep, setSpeed } =
+  const { currentStep, stepProgress, isPlaying, speed, play, pause, resume, reset, jumpTo, setStep, setSpeed } =
     usePlayback(totalSteps);
 
   // Voice session — drives playback via setStep
   const [voiceMode, setVoiceMode] = useState<'pending' | 'active' | 'fallback' | 'complete'>('pending');
+  const [playbackState, setPlaybackState] = useState<'idle' | 'playing' | 'paused'>('idle');
   const [showScore, setShowScore] = useState(false);
   const voiceStartedRef = useRef(false);
   const activeStepRef = useRef<HTMLDivElement>(null);
+  const pendingStepRef = useRef<number | null>(null);
 
   // Quiz hook — needs quizzes from lesson + sendQuizAnswer from voice
   const quizzes = lessonState.status === 'success' ? (lessonState.lesson.quizzes ?? []) : [];
@@ -74,14 +76,20 @@ export default function BoardPage() {
   // Voice session callbacks
   const onAdvanceStep = useCallback(
     (step: number) => {
+      // When paused, buffer the step instead of animating it
+      if (playbackState === 'paused') {
+        pendingStepRef.current = step;
+        return;
+      }
       setStep(step);
     },
-    [setStep],
+    [setStep, playbackState],
   );
 
   const onNarrationComplete = useCallback(
     (quizResults?: ServerQuizResults) => {
       setVoiceMode('complete');
+      setPlaybackState('idle');
       quiz.endQuiz(quizResults);
       if (quizResults) {
         setShowScore(true);
@@ -144,6 +152,7 @@ export default function BoardPage() {
       voiceStartedRef.current = true;
       voice.startSession(lessonState.lesson).then(() => {
         setVoiceMode('active');
+        setPlaybackState('playing');
       });
     }
   }, [lessonState.status]);
@@ -152,6 +161,7 @@ export default function BoardPage() {
   useEffect(() => {
     if (voice.status === 'error' && voiceMode !== 'fallback') {
       setVoiceMode('fallback');
+      setPlaybackState('idle');
       if (quiz.quizState !== 'idle') {
         quiz.dismissReveal();
       }
@@ -511,12 +521,12 @@ export default function BoardPage() {
             Speed
           </span>
           {[0.5, 1, 1.5, 2].map((s) => {
-            const isVoiceNarrating = voiceMode === 'active' && voice.status === 'narrating';
+            const controlsLocked = playbackState === 'playing' || playbackState === 'paused';
             return (
               <button
                 key={s}
-                onClick={() => !isVoiceNarrating && setSpeed(s)}
-                disabled={isVoiceNarrating}
+                onClick={() => !controlsLocked && setSpeed(s)}
+                disabled={controlsLocked}
                 style={{
                   padding: '3px 8px',
                   borderRadius: 4,
@@ -524,8 +534,8 @@ export default function BoardPage() {
                   background: speed === s ? '#2d5a3d' : 'transparent',
                   border: `1px solid ${speed === s ? '#2d5a3d' : '#2a2e2a'}`,
                   color: speed === s ? '#7ee08a' : '#706b60',
-                  cursor: isVoiceNarrating ? 'not-allowed' : 'pointer',
-                  opacity: isVoiceNarrating ? 0.35 : 1,
+                  cursor: controlsLocked ? 'not-allowed' : 'pointer',
+                  opacity: controlsLocked ? 0.35 : 1,
                   fontFamily: "'JetBrains Mono', monospace",
                 }}
               >
@@ -597,23 +607,23 @@ export default function BoardPage() {
                 {group.steps.map(({ idx, narration: stepNarration }) => {
                   const isActive = idx === currentStep;
                   const isDone = idx < currentStep;
-                  const isVoiceNarrating = voiceMode === 'active' && voice.status === 'narrating';
+                  const controlsLocked = playbackState === 'playing' || playbackState === 'paused';
                   return (
                     <div
                       key={idx}
                       ref={isActive ? activeStepRef : undefined}
-                      onClick={() => !isVoiceNarrating && jumpTo(idx)}
+                      onClick={() => !controlsLocked && jumpTo(idx)}
                       style={{
                         display: 'flex',
                         gap: 10,
                         marginBottom: 4,
-                        cursor: isVoiceNarrating ? 'not-allowed' : 'pointer',
+                        cursor: controlsLocked ? 'not-allowed' : 'pointer',
                         padding: '8px 10px',
                         borderRadius: 8,
                         background: isActive ? '#1a2e1e' : 'transparent',
                         border: `1px solid ${isActive ? '#2d5a3d44' : 'transparent'}`,
                         transition: 'all 0.15s',
-                        opacity: isVoiceNarrating && !isActive ? 0.5 : 1,
+                        opacity: controlsLocked && !isActive ? 0.5 : 1,
                       }}
                     >
                       <div
@@ -651,94 +661,119 @@ export default function BoardPage() {
             ))}
           </div>
 
-          {/* Playback controls */}
+          {/* Playback controls — Pause / Resume / Play + Restart */}
           <div style={{ padding: '12px 14px', borderTop: '1px solid #2a2e2a' }}>
             <div style={{ display: 'flex', gap: 6 }}>
-              {voiceMode === 'active' && voice.status === 'narrating' ? (
-                <button
-                  onClick={() => {
-                    voice.stopSession();
-                    voiceStartedRef.current = false;
-                    reset();
-                    setVoiceMode('pending');
-                    voice.startSession(lesson).then(() => {
-                      setVoiceMode('active');
-                    });
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '11px',
-                    borderRadius: 8,
-                    background: '#3a2d1a',
-                    border: 'none',
-                    color: '#f0a050',
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  Restart Course
-                </button>
-              ) : !isPlaying ? (
-                <button
-                  onClick={() => {
-                    if (voiceMode === 'complete') {
-                      // Lesson finished — restart voice from beginning
-                      reset();
+              {(() => {
+                const isConnecting = voiceMode === 'pending' || (voiceMode === 'active' && voice.status === 'connecting');
+
+                if (playbackState === 'playing') {
+                  // Currently playing — show Pause
+                  return (
+                    <button
+                      onClick={() => {
+                        voice.pauseAudio();
+                        pause();
+                        setPlaybackState('paused');
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '11px',
+                        borderRadius: 8,
+                        background: '#3a2d1a',
+                        border: 'none',
+                        color: '#f0a050',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      {'\u23F8'} Pause
+                    </button>
+                  );
+                }
+
+                if (playbackState === 'paused') {
+                  // Paused — show Resume
+                  return (
+                    <button
+                      onClick={() => {
+                        voice.resumeAudio();
+                        // Apply any buffered step, otherwise resume current animation
+                        if (pendingStepRef.current !== null) {
+                          setStep(pendingStepRef.current);
+                          pendingStepRef.current = null;
+                        } else {
+                          resume();
+                        }
+                        setPlaybackState('playing');
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '11px',
+                        borderRadius: 8,
+                        background: '#2d5a3d',
+                        border: 'none',
+                        color: '#e8e4d9',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      {'\u25B6'} Resume
+                    </button>
+                  );
+                }
+
+                // Idle — show Play (restart voice session)
+                return (
+                  <button
+                    onClick={() => {
                       voice.stopSession();
                       voiceStartedRef.current = false;
+                      reset();
+                      pendingStepRef.current = null;
                       setVoiceMode('pending');
+                      setPlaybackState('idle');
                       voice.startSession(lesson).then(() => {
                         setVoiceMode('active');
+                        setPlaybackState('playing');
                       });
-                    } else {
-                      play();
-                    }
-                  }}
-                  disabled={voiceMode === 'active' && voice.status === 'connecting'}
-                  style={{
-                    flex: 1,
-                    padding: '11px',
-                    borderRadius: 8,
-                    background: '#2d5a3d',
-                    border: 'none',
-                    color: '#e8e4d9',
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    opacity: voiceMode === 'active' && voice.status === 'connecting' ? 0.4 : 1,
-                  }}
-                >
-                  {currentStep >= totalSteps - 1 ? '\u27F2 Replay' : '\u25B6 Play'}
-                </button>
-              ) : (
-                <button
-                  onClick={pause}
-                  style={{
-                    flex: 1,
-                    padding: '11px',
-                    borderRadius: 8,
-                    background: '#3a2d1a',
-                    border: 'none',
-                    color: '#f0a050',
-                    cursor: 'pointer',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  {'\u23F8 Pause'}
-                </button>
-              )}
+                    }}
+                    disabled={isConnecting}
+                    style={{
+                      flex: 1,
+                      padding: '11px',
+                      borderRadius: 8,
+                      background: '#2d5a3d',
+                      border: 'none',
+                      color: '#e8e4d9',
+                      cursor: isConnecting ? 'not-allowed' : 'pointer',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      fontFamily: 'inherit',
+                      opacity: isConnecting ? 0.4 : 1,
+                    }}
+                  >
+                    {'\u25B6'} Play
+                  </button>
+                );
+              })()}
+              {/* Restart — always available */}
               <button
                 onClick={() => {
-                  if (voice.status === 'narrating') {
-                    voice.stopSession();
-                    setVoiceMode('fallback');
-                  }
+                  voice.stopSession();
+                  voiceStartedRef.current = false;
                   reset();
+                  pendingStepRef.current = null;
+                  setVoiceMode('pending');
+                  setPlaybackState('idle');
+                  voice.startSession(lesson).then(() => {
+                    setVoiceMode('active');
+                    setPlaybackState('playing');
+                  });
                 }}
                 style={{
                   padding: '11px 14px',
@@ -750,6 +785,7 @@ export default function BoardPage() {
                   fontSize: 13,
                   fontFamily: 'inherit',
                 }}
+                title="Restart Course"
               >
                 {'\u21BA'}
               </button>

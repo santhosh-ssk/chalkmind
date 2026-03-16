@@ -497,8 +497,9 @@ def validate_and_flatten(data: dict) -> dict:
             for sj, step in enumerate(scene_steps):
                 if not isinstance(step, dict):
                     raise ValueError(f"Scene {si}, step {sj} must be an object")
-                if not isinstance(step.get("narration"), str):
-                    raise ValueError(f"Scene {si}, step {sj} must have a 'narration' string")
+                if not isinstance(step.get("narration"), str) or not step["narration"].strip():
+                    step["narration"] = f"Let's continue with {scene_title}."
+                    logger.warning("Scene %d, step %d missing narration — using fallback", si, sj)
                 if not isinstance(step.get("draws"), list):
                     raise ValueError(f"Scene {si}, step {sj} must have a 'draws' array")
                 for dj, draw in enumerate(step["draws"]):
@@ -536,8 +537,9 @@ def validate_and_flatten(data: dict) -> dict:
     for i, step in enumerate(steps):
         if not isinstance(step, dict):
             raise ValueError(f"Step {i} must be an object")
-        if not isinstance(step.get("narration"), str):
-            raise ValueError(f"Step {i} must have a 'narration' string")
+        if not isinstance(step.get("narration"), str) or not step["narration"].strip():
+            step["narration"] = "Let's continue."
+            logger.warning("Step %d missing narration — using fallback", i)
         if not isinstance(step.get("draws"), list):
             raise ValueError(f"Step {i} must have a 'draws' array")
         for j, draw in enumerate(step["draws"]):

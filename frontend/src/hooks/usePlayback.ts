@@ -74,6 +74,41 @@ export function usePlayback(totalSteps: number) {
     playingRef.current = false;
   }, [cancelAnim]);
 
+  // Resume current step from its current progress (not from 0, not next step)
+  const resume = useCallback(() => {
+    if (isPlaying || totalSteps === 0 || currentStep < 0) return;
+    setIsPlaying(true);
+    playingRef.current = true;
+
+    // Adjust startRef so elapsed calculation picks up from current stepProgress
+    const alreadyElapsed = stepProgress * STEP_DURATION;
+    startRef.current = performance.now() - alreadyElapsed / speed;
+
+    const step = currentStep;
+    const tick = (now: number) => {
+      if (!playingRef.current) return;
+      const elapsed = (now - startRef.current) * speed;
+      const p = Math.min(elapsed / STEP_DURATION, 1);
+      setStepProgress(p);
+
+      if (p < 1) {
+        animRef.current = requestAnimationFrame(tick);
+      } else {
+        const pauseMs = Math.max(2000 / speed, 500);
+        setTimeout(() => {
+          if (!playingRef.current) return;
+          if (step < totalSteps - 1) {
+            animateStep(step + 1);
+          } else {
+            setIsPlaying(false);
+            playingRef.current = false;
+          }
+        }, pauseMs);
+      }
+    };
+    animRef.current = requestAnimationFrame(tick);
+  }, [isPlaying, totalSteps, currentStep, stepProgress, speed, animateStep, cancelAnim]);
+
   const reset = useCallback(() => {
     cancelAnim();
     setIsPlaying(false);
@@ -125,5 +160,5 @@ export function usePlayback(totalSteps: number) {
   // Cleanup on unmount
   useEffect(() => cancelAnim, [cancelAnim]);
 
-  return { currentStep, stepProgress, isPlaying, speed, play, pause, reset, jumpTo, setStep, setSpeed };
+  return { currentStep, stepProgress, isPlaying, speed, play, pause, resume, reset, jumpTo, setStep, setSpeed };
 }

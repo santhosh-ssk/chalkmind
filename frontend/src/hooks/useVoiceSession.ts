@@ -44,6 +44,7 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
   const [currentNarrationStep, setCurrentNarrationStep] = useState(-1);
   const [transcript, setTranscript] = useState<Transcript[]>([]);
   const [liveTranscript, setLiveTranscript] = useState('');
+  const [isMuted, setIsMuted] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const playbackCtxRef = useRef<AudioContext | null>(null);
@@ -216,9 +217,24 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
     [cleanup],
   );
 
+  const pauseAudio = useCallback(async () => {
+    if (playbackCtxRef.current && playbackCtxRef.current.state === 'running') {
+      await playbackCtxRef.current.suspend();
+      setIsMuted(true);
+    }
+  }, []);
+
+  const resumeAudio = useCallback(async () => {
+    if (playbackCtxRef.current && playbackCtxRef.current.state === 'suspended') {
+      await playbackCtxRef.current.resume();
+      setIsMuted(false);
+    }
+  }, []);
+
   const stopSession = useCallback(() => {
     cleanup();
     setStatus('idle');
+    setIsMuted(false);
     setLiveTranscript('');
     currentModelTextRef.current = '';
   }, [cleanup]);
@@ -231,8 +247,11 @@ export function useVoiceSession(options: UseVoiceSessionOptions = {}) {
     currentNarrationStep,
     transcript,
     liveTranscript,
+    isMuted,
     startSession,
     stopSession,
+    pauseAudio,
+    resumeAudio,
     sendQuizAnswer,
   };
 }
