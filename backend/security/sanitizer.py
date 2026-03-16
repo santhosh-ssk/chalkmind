@@ -5,7 +5,7 @@ import re
 from better_profanity import profanity
 from fastapi import HTTPException
 
-from backend.security.blocklist import check_injection
+from backend.security.blocklist import check_injection, check_sensitive_topic
 
 # Initialize profanity filter once
 profanity.load_censor_words()
@@ -40,6 +40,13 @@ def sanitize_input(text: str) -> str:
         raise HTTPException(
             status_code=400,
             detail="Your input contains disallowed patterns. Please rephrase your request.",
+        )
+
+    # Sensitive / dangerous topic check
+    if check_sensitive_topic(text):
+        raise HTTPException(
+            status_code=400,
+            detail="This topic isn't suitable for an educational lesson. Please choose a different topic.",
         )
 
     return text

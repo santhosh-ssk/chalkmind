@@ -360,6 +360,10 @@ export default function BoardPage() {
 
   /* ── Error state — redirect home (reCAPTCHA token is stale on refresh) ── */
   if (lessonState.status === 'error') {
+    const isContentBlock = lessonState.message.includes("isn't suitable")
+      || lessonState.message.includes('not allowed')
+      || lessonState.message.includes('appropriate for an educational');
+
     return (
       <div
         style={{
@@ -372,15 +376,21 @@ export default function BoardPage() {
           background: '#111613',
           color: '#d4d0c8',
           fontFamily: "'Lexend', sans-serif",
+          padding: '0 24px',
         }}
       >
-        <div style={{ fontSize: 40 }}>⚠</div>
-        <div style={{ fontSize: 18, color: '#e07050', maxWidth: 480, textAlign: 'center' }}>
-          Something went wrong
+        <div style={{ fontSize: 40 }}>{isContentBlock ? '\uD83D\uDEAB' : '\u26A0'}</div>
+        <div style={{ fontSize: 18, color: isContentBlock ? '#f5c842' : '#e07050', maxWidth: 480, textAlign: 'center' }}>
+          {isContentBlock ? 'Topic Not Available' : 'Something went wrong'}
         </div>
-        <div style={{ fontSize: 14, color: '#706b60', maxWidth: 400, textAlign: 'center' }}>
+        <div style={{ fontSize: 15, color: isContentBlock ? '#d4d0c8' : '#706b60', maxWidth: 440, textAlign: 'center', lineHeight: 1.6 }}>
           {lessonState.message}
         </div>
+        {isContentBlock && (
+          <div style={{ fontSize: 13, color: '#5a6a5a', maxWidth: 400, textAlign: 'center', lineHeight: 1.5 }}>
+            Try topics like "How does photosynthesis work?" or "History of the Roman Empire"
+          </div>
+        )}
         <button
           onClick={() => navigate('/')}
           style={{
@@ -396,7 +406,7 @@ export default function BoardPage() {
             fontFamily: 'inherit',
           }}
         >
-          ← Try again from homepage
+          {isContentBlock ? '\u2190 Choose a different topic' : '\u2190 Try again from homepage'}
         </button>
       </div>
     );
@@ -903,6 +913,21 @@ export default function BoardPage() {
 
           {/* Canvas */}
           <ChalkboardCanvas lesson={lesson} currentStep={currentStep} stepProgress={stepProgress} />
+
+          {/* AI disclaimer */}
+          <div
+            style={{
+              padding: '6px 18px',
+              background: 'rgba(26, 32, 26, 0.85)',
+              borderTop: '1px solid #2a2e2a',
+              fontSize: 11,
+              color: '#5a6a5a',
+              textAlign: 'center',
+              flexShrink: 0,
+            }}
+          >
+            AI-generated content may contain inaccuracies. Always verify important information with trusted sources.
+          </div>
 
           {/* Quiz overlay */}
           <QuizOverlay

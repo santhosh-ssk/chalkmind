@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
@@ -420,22 +420,49 @@ export default function LandingPage() {
           }}
         >
           <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3 }}>
-            {['About', 'Privacy', 'Terms'].map((label) => (
-              <Link
-                key={label}
-                href="#"
-                underline="none"
-                sx={{
-                  color: '#6b7280',
-                  fontSize: '0.875rem',
-                  fontWeight: 500,
-                  transition: 'color 0.2s',
-                  '&:hover': { color: '#2dd4bf' },
-                }}
-              >
-                {label}
-              </Link>
-            ))}
+            <Link
+              component={RouterLink}
+              to="/terms"
+              underline="none"
+              sx={{
+                color: '#6b7280',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                transition: 'color 0.2s',
+                '&:hover': { color: '#2dd4bf' },
+              }}
+            >
+              Terms
+            </Link>
+            <Link
+              component={RouterLink}
+              to="/terms#privacy"
+              underline="none"
+              sx={{
+                color: '#6b7280',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                transition: 'color 0.2s',
+                '&:hover': { color: '#2dd4bf' },
+              }}
+            >
+              Privacy
+            </Link>
+            <Link
+              href="https://github.com/santhosh-ssk/chalkmind"
+              target="_blank"
+              rel="noopener noreferrer"
+              underline="none"
+              sx={{
+                color: '#6b7280',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                transition: 'color 0.2s',
+                '&:hover': { color: '#2dd4bf' },
+              }}
+            >
+              About
+            </Link>
           </Box>
           <Typography variant="caption" sx={{ color: '#4b5563' }}>
             Built with Gemini AI &middot; Google Cloud

@@ -79,7 +79,21 @@ def quiz_scene_indices(scene_count: int) -> list[int]:
     return [1, 3]
 
 
-RESEARCH_PROMPT = """You are an educational researcher preparing material for a visual whiteboard lesson.
+SAFETY_PREAMBLE = """CONTENT SAFETY RULES:
+- Only create educational content appropriate for all ages.
+- Refuse topics involving: weapons, violence, illegal activities, self-harm, harassment, hate speech, sexually explicit content, or dangerous activities.
+- If the topic seems harmful, respond with: "I cannot create a lesson on this topic."
+- Focus on educational, scientific, historical, cultural, and creative topics.
+"""
+
+SAFETY_SETTINGS = [
+    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+    types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+    types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+    types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_MEDIUM_AND_ABOVE"),
+]
+
+RESEARCH_PROMPT = SAFETY_PREAMBLE + """You are an educational researcher preparing material for a visual whiteboard lesson.
 The lesson will be drawn on a dark chalkboard (780x680px) with animated diagrams.
 
 Given a topic, search the web to gather comprehensive, accurate, up-to-date information.
@@ -121,7 +135,7 @@ Suggest how to split into 3-4 scenes:
 Return a well-organized summary. The diagram checklist is the MOST IMPORTANT part —
 it directly determines what gets drawn. Be exhaustive: missing items = incomplete diagram."""
 
-DSL_SYSTEM_PROMPT = """You are a visual teacher creating animated whiteboard lessons.
+DSL_SYSTEM_PROMPT = SAFETY_PREAMBLE + """You are a visual teacher creating animated whiteboard lessons.
 Given a topic and research material, produce a rich, detailed lesson with beautiful diagrams.
 
 IMPORTANT: Your lesson is MULTI-SCENE. Each scene gets a FRESH, BLANK canvas.
@@ -396,18 +410,21 @@ topic_researcher = Agent(
     model="gemini-3.1-flash-lite-preview",
     instruction=RESEARCH_PROMPT,
     tools=[google_search],
+    generate_content_config=types.GenerateContentConfig(safety_settings=SAFETY_SETTINGS),
 )
 
 lesson_generator_agent = Agent(
     name="lesson_generator",
     model="gemini-3-flash-preview",
     instruction=DSL_SYSTEM_PROMPT,
+    generate_content_config=types.GenerateContentConfig(safety_settings=SAFETY_SETTINGS),
 )
 
 quiz_generator_agent = Agent(
     name="quiz_generator",
     model="gemini-3-flash-preview",
     instruction=QUIZ_GENERATION_PROMPT,
+    generate_content_config=types.GenerateContentConfig(safety_settings=SAFETY_SETTINGS),
 )
 
 _session_service = InMemorySessionService()
@@ -643,7 +660,9 @@ async def generate_lesson(
     )
 
     if not research_text.strip():
-        raise ValueError("Research agent returned no results")
+        raise ValueError(
+            "This topic isn't suitable for an educational lesson. Please choose a different topic."
+        )
 
     # ── Step 2: Generate structured lesson ───────────────────
     lesson_session_id = str(uuid.uuid4())
@@ -689,6 +708,14 @@ async def generate_lesson(
 
     # ── Parse & validate ─────────────────────────────────────
     lesson_text = strip_fences(lesson_text)
+
+    # Safety block: Gemini returned empty or a refusal instead of JSON
+    if not lesson_text.strip() or lesson_text.strip().startswith("I cannot"):
+        logger.warning("[SAFETY] Lesson agent returned empty/refusal for topic: %s", topic)
+        raise ValueError(
+            "This topic isn't suitable for an educational lesson. Please choose a different topic."
+        )
+
     try:
         data = json.loads(lesson_text)
     except json.JSONDecodeError as e:
